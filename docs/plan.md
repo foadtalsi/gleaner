@@ -27,54 +27,21 @@ C'est le cas, par exemple :
 - quand la file SQS est vide ;
 - quand un morceau n'utilise qu'une partie du CPU libre, par exemple un traitement mono-thread sur une machine à 4 vCPU.
 
-**Mesure.** La mesure tourne dans un **thread séparé** de la boucle principale. Sinon, pendant l'exécution d'un morceau, la boucle est bloquée et ne mesure rien, alors que c'est justement à ce moment-là qu'il faut savoir si du CPU reste inutilisé.
+**Mesure.** L'agent mesure le CPU inutilisé de toute la machine (application, tâches et reste), en moyenne sur toute la période depuis la mesure précédente. Il l'envoie à core avec le nombre de vCPU et la durée de la période, dans son heartbeat.
 
-Toutes les `INTERVALLE` secondes, le thread :
-1. mesure le CPU inutilisé de toute la machine (application, tâches et reste) ;
-2. le convertit en **vCPU·secondes gaspillées** : `% inutilisé × nb de vCPU × INTERVALLE` ;
-3. ajoute une ligne dans `gaspillage.csv` : `horodatage, % CPU inutilisé, vCPU·s gaspillées`.
+Core convertit chaque heartbeat en **vCPU·secondes gaspillées** : `% inutilisé × nb de vCPU × durée de la période`, et les ajoute au total de l'instance.
 
 La somme des vCPU·secondes, divisée par 3600, donne des vCPU·heures. On les multiplie par le prix d'un vCPU·heure de l'instance pour obtenir le coût.
 
-
-
-
-**À décider**
-- **La marge compte-t-elle comme gaspillée ?** Le CPU laissé volontairement libre pour l'application (`MARGE_CPU`) est inutilisé, mais ce n'est pas une erreur. Faut-il l'enregistrer dans le gaspillage, ou seulement le CPU inutilisé au-delà de la marge ?
-- **Où enregistrer ?** Le fichier local `gaspillage.csv` suffit pour le MVP. Si tu veux voir le total de plusieurs EC2 au même endroit, il faudra envoyer ces chiffres ailleurs.
+**Décisions**
+- **Tout le CPU inutilisé compte comme gaspillé**, y compris la marge laissée à l'application, sans distinction.
+- **Le total est gardé en mémoire** dans core (`core/ec2/waste.py`). Il est remis à zéro quand core redémarre.
+- **Le prix du vCPU·heure est saisi à la main** par instance, dans le dictionnaire `prices` de `core/ec2/waste.py`. Plus tard, il viendra de l'API Pricing d'AWS.
+- **Le client consulte son gaspillage** via `GET /waste/{instance_id}` : vCPU·heures gaspillées et coût si le prix est connu.
 
 ## Architecture
 
-```
-┌──────────────── core ────────────────┐
-│ ec2/                                 │
-│   collector.py     task_manager.py   │
-│ infra/                               │
-└──────────────────▲───────────────────┘
-                   │ ressources libres
-┌──────────────────┴───────────────────┐
-│ agent (EC2 / ECS)                    │
-└──────────────────────────────────────┘
-```
-
-Core est découpé par service : un dossier par service (`ec2/`, puis `ecs/`).
-
-- `collector.py` reçoit les données envoyées par l'agent qui tourne chez le client.
-- `task_manager.py` gère les tâches en cours sur les machines de ce service.
-
-`infra/` contient l'infrastructure Terraform.
-
-### Agent
-
-- Mesure le CPU et la mémoire inutilisés de la machine (instance EC2 ou service ECS).
-- Envoie ces informations à core à intervalle régulier.
-
-### Core
-
-- Reçoit les ressources libres envoyées par les agents.
-- Décide quelles tâches lancer et sur quelle machine, selon les ressources libres.
-- Lance chaque tâche dans un conteneur Docker, limité en CPU et mémoire (`--cpus`, `--memory`) aux ressources libres, pour ne pas gêner les applications en place.
-- Arrête une tâche si les ressources libres de sa machine ne suffisent plus.
+Le fonctionnement du code (quel fichier fait quoi, le cycle d'un heartbeat, le format des ordres) est décrit dans [architecture.md](architecture.md).
 
 ## Tâches découpées et file SQS
 
@@ -105,7 +72,7 @@ Pour cela :
 
 1. **Découpage.** L'ingénieur découpe lui-même sa tâche en unités, gleaner ne le fait pas. Chaque unité devient un message SQS qui décrit ce qu'il y a à traiter, par exemple un fichier ou une plage de données.
 2. **Traitement.** Sur l'EC2, le conteneur Docker lit **un seul message à la fois**. Il traite l'unité, puis **supprime le message** de la file, et seulement une fois l'unité terminée.
-3. **Arrêt brutal.** Quand l'agent signale que le CPU de l'EC2 monte, core fait tuer le conteneur immédiatement. Il n'attend pas la fin de l'unité en cours.
+3. **Arrêt brutal.** Quand l'agent signale que le CPU de l'EC2 monte, core répond `stop` et l'agent tue le conteneur immédiatement. Il n'attend pas la fin de l'unité en cours.
 4. **Reprise automatique.** Le message de l'unité interrompue n'a pas été supprimé. SQS le rend de nouveau visible à la fin du *visibility timeout*, et un autre conteneur le reprend quand de la puissance se libère.
 
 C'est le *visibility timeout* de SQS qui rend l'arrêt brutal sans danger. Un message lu devient invisible pendant un temps donné. S'il n'est pas supprimé pendant ce temps, il revient dans la file. core n'a donc rien à faire pour remettre une unité interrompue en file.
@@ -126,14 +93,35 @@ C'est le *visibility timeout* de SQS qui rend l'arrêt brutal sans danger. Un me
 
 La file SQS est créée avec Terraform, dans `infra/`.
 
+## Comment l'ingénieur fournit son traitement
+
+gleaner ne peut pas deviner ce que fait une unité (redimensionner une image, encoder une vidéo…). Le traitement doit donc venir de l'ingénieur. gleaner proposera deux façons de le fournir, à terme depuis une interface web.
+
+### Maintenant : son image Docker et une commande
+
+L'ingénieur donne :
+- **une image Docker** qui contient son code et ses dépendances, par exemple `123456.dkr.ecr.eu-west-3.amazonaws.com/resize:latest` ;
+- **une commande** à lancer dans cette image, par exemple `python resize.py`.
+
+Pour chaque message SQS, gleaner lance cette commande avec le contenu du message dans la variable d'environnement `GLEANER_UNIT` :
+- la commande se termine sans erreur (code de sortie 0) : gleaner supprime le message ;
+- la commande échoue, ou elle est tuée par un arrêt brutal : le message n'est pas supprimé, et SQS le remet en file après le *visibility timeout*.
+
+Le code de l'ingénieur ne contient **rien de spécifique à gleaner** : il lit une variable d'environnement et se termine. N'importe quel langage fonctionne, et ses dépendances sont déjà dans son image.
+
+### Plus tard : un catalogue de tâches toutes faites
+
+gleaner proposera aussi des **tâches préfaites** (par exemple « redimensionner des images », « encoder des vidéos ») : l'ingénieur choisit une tâche dans une liste et remplit ses paramètres, sans écrire de code. Ces tâches seront des images Docker fournies par gleaner, qui suivent la même règle (`GLEANER_UNIT` en entrée, code de sortie 0 en cas de succès) : elles passeront donc par le même mécanisme que les images des ingénieurs.
+
 ## Plan
 
 | Semaine | Contenu |
 |---|---|
 | 1 | Agent : mesure du CPU et de la mémoire libres, envoi à core. Core : réception de ces informations. |
-| 2 | File SQS en Terraform, dans laquelle l'ingénieur envoie les unités qu'il a découpées. |
-| 3 | Lancement sur l'EC2 d'un conteneur Docker qui lit SQS unité par unité, avec les limites CPU et mémoire. |
-| 4 | Arrêt brutal du conteneur quand le CPU de l'EC2 monte. Vérification que les unités interrompues reviennent dans SQS et sont refaites. |
-| 5 | Installation de l'agent sur une instance EC2 et sur un service ECS. |
+| 2 | Enregistrement du CPU gaspillé : calcul par core à chaque heartbeat, total gardé en mémoire, route `GET /waste/{instance_id}` avec le coût. |
+| 3 | File SQS en Terraform, dans laquelle l'ingénieur envoie les unités qu'il a découpées. |
+| 4 | Lancement sur l'EC2 d'un conteneur Docker qui lit SQS unité par unité, avec les limites CPU et mémoire. |
+| 5 | Arrêt brutal du conteneur quand le CPU de l'EC2 monte. Vérification que les unités interrompues reviennent dans SQS et sont refaites. |
+| 6 | Installation de l'agent sur une instance EC2 et sur un service ECS. |
 
 
