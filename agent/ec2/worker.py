@@ -32,6 +32,13 @@ class Worker:
             pass  # aucune tache en cours
 
     def run_forever(self):
+        try:
+            # tache laissee par un agent precedent (mise a jour, plantage...) : sinon son nom bloque toutes les taches suivantes
+            docker_client.containers.get(TASK_NAME).remove(force=True)
+            print("Tâche orpheline supprimée, son message reviendra dans la file", flush=True)
+        except docker.errors.NotFound:
+            pass
+
         while True:
             if self.limits is None: # regarde si limite a une valeur, si y'en a sa veut dire que agent.py a recu start() de core, donc on peut commencer, mais si c'est None alors ya rien et on attend 1 seconde
                 time.sleep(1)  # en pause, on attend un start
@@ -53,6 +60,8 @@ class Worker:
                             environment={"GLEANER_TASK": message["Body"]},
                             nano_cpus=int(cpus * 1e9),  # equivalent de --cpus
                             mem_limit=f"{memory_mb}m",  # equivalent de --memory
+                            cpu_shares=2,  # priorite cpu minimale (1024 par defaut) : sous contention, le noyau donne le cpu a l'application du client
+                            oom_score_adj=1000,  # si la memoire manque, le noyau tue la tache en premier, jamais l'application du client
                         )
                         sqs.delete_message(QueueUrl=QUEUE_URL, ReceiptHandle=message["ReceiptHandle"])
                         print("Tâche terminée", flush=True)
@@ -63,3 +72,5 @@ class Worker:
                 # SQS injoignable, image introuvable... : le thread ne doit jamais mourir
                 print(f"Erreur du worker : {e}", flush=True)
                 time.sleep(5)
+    
+

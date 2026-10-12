@@ -115,13 +115,19 @@ gleaner proposera aussi des **tâches préfaites** (par exemple « redimensionne
 
 ## Plan
 
-| Semaine | Contenu |
-|---|---|
-| 1 | Agent : mesure du CPU et de la mémoire libres, envoi à core. Core : réception de ces informations. |
-| 2 | Enregistrement du CPU gaspillé : calcul par core à chaque heartbeat, total gardé en mémoire, route `GET /waste/{instance_id}` avec le coût. |
-| 3 | File SQS en Terraform, dans laquelle l'ingénieur envoie les unités qu'il a découpées. |
-| 4 | Lancement sur l'EC2 d'un conteneur Docker qui lit SQS unité par unité, avec les limites CPU et mémoire. |
-| 5 | Arrêt brutal du conteneur quand le CPU de l'EC2 monte. Vérification que les unités interrompues reviennent dans SQS et sont refaites. |
-| 6 | Installation de l'agent sur une instance EC2 et sur un service ECS. |
+On avance étape par étape. Avant les premiers clients, on ne fait que ce qui est **critique** : ce sans quoi gleaner gêne l'application du client, ne fonctionne pas chez lui, ou expose ses données. Le premier client sera sur **EC2** ; ECS viendra une fois EC2 entièrement terminé.
 
+| Étape | Contenu | État |
+|---|---|---|
+| 1 | Agent : mesure du CPU et de la mémoire libres, envoi à core. Core : réception de ces informations. | ✅ |
+| 2 | Enregistrement du CPU gaspillé : calcul par core à chaque heartbeat, route `GET /waste/{instance_id}` avec le coût. | ✅ |
+| 3 | File SQS et dead-letter queue en Terraform. | ✅ déployée (us-east-1) |
+| 4 | Worker dans l'agent : lit SQS tâche par tâche et lance l'image de l'ingénieur avec les limites CPU et mémoire. | ✅ testé avec la vraie file |
+| 5 | **Ne jamais gêner l'application du client** : régler la boucle stop/start (core doit distinguer le CPU du client de celui des tâches gleaner), arrêter la tâche quand core est injoignable, nettoyer une tâche orpheline au redémarrage de l'agent, vérifier qu'un message tué revient bien dans la file. | ⬜ |
+| 6 | **Héberger core** pour que les agents puissent le joindre. | ⬜ |
+| 7 | **Installation sur EC2** : rôle IAM (droits SQS) et *hop limit* des métadonnées à 2, `INSTANCE_ID` lu dans les métadonnées de l'instance, image de l'agent publiée. | ⬜ |
+| 8 | **Sécurité** : HTTPS entre l'agent et core, une clé par client. | ⬜ |
+| 9 | **Gaspillage stocké dans DynamoDB**, pour qu'il survive aux redémarrages de core. Une fois core terminé. | ⬜ |
+| 10 | **ECS**, une fois EC2 entièrement terminé. | ⬜ |
 
+**Plus tard (utile, mais pas critique pour les premiers clients)** : une file par tâche, l'interface web, le prix du vCPU·heure via l'API AWS, le catalogue de tâches préfaites, le suivi de l'avancement d'une tâche.

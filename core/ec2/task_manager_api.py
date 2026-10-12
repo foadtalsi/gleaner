@@ -17,6 +17,7 @@ class HeartbeatData(BaseModel):
     vcpus: int
     timestamp: int
     period_seconds: float  # durée couverte par la mesure
+    client_cpu_percent: float  # % du cpu de la machine utilise par l'application du client (sans nos taches), calcule par l'agent
 
 
 # l'agent envoie ses mesures, core les garde, compte le gaspillage, et repond avec un Order (start / stop)
@@ -26,7 +27,7 @@ def heartbeat(instance_id: str, data: HeartbeatData):
 
     record_waste(instance_id, data.cpu_free_percent, data.vcpus, data.period_seconds)
 
-    return choose_container_action(data)  # l'agent recoit ses ordres dans la reponse au heartbeat
+    return choose_container_action(instance_id, data)  # l'agent recoit ses ordres dans la reponse au heartbeat
  
 
 
