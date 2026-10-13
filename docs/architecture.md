@@ -62,6 +62,7 @@ Défini dans `agent/ec2/agent.py` et `core/ec2/task_manager_api.py`.
 | `timestamp` | heure de la mesure (secondes Unix) |
 | `period_seconds` | durée couverte par la mesure, utilisée pour le calcul du gaspillage |
 | `client_cpu_percent` | % du CPU de la machine utilisé par l'application du client, **sans nos tâches**. Calculé par l'agent : CPU utilisé de la machine − CPU de `gleaner-task` (mesuré avec l'API Docker, sur ~1 s), ramené à 0 s'il est négatif |
+| `client_mem_free_mb` | mémoire qui serait libre **sans nos tâches** : mémoire disponible de la machine + mémoire de `gleaner-task` (mesurée avec l'API Docker). Calculée par l'agent |
 
 ### `Order` : de core vers l'agent
 
@@ -125,11 +126,11 @@ Constantes en haut de `scheduler.py`, à ajuster après les tests :
 
 Le scheduler décide sur le **CPU du client** seulement, sans compter nos tâches : c'est le champ `client_cpu_percent`, calculé par l'agent. Sinon, une tâche qui consomme du CPU ferait croire que le client est chargé, et core la tuerait en boucle.
 
-- **démarrer** une tâche seulement si le client utilise **moins de 70 %** du CPU et qu'il reste **au moins 1 Go** de mémoire libre ;
+- **démarrer** une tâche seulement si le client utilise **moins de 70 %** du CPU et qu'il reste **au moins 1 Go** de mémoire libre sans compter nos tâches (`client_mem_free_mb`) ;
 - **arrêter** une tâche en cours seulement si le client dépasse **90 %** du CPU (ou si la mémoire libre passe sous 1 Go) ;
 - **entre 70 et 90 %**, rien ne change : une tâche en cours continue, sinon on n'en lance pas. Pour ça, core garde le dernier ordre envoyé à chaque instance (`last_orders`) ;
 - **30 % du CPU et 512 Mo** de mémoire restent à l'application du client au démarrage d'une tâche : `cpus = vCPU × (100 − CPU du client − 30) / 100` ; sous **0,1 vCPU**, pas de tâche ;
-- `memory_mb = mémoire libre − 512`.
+- `memory_mb = client_mem_free_mb − 512`.
 
 ## Protection de l'application du client par le noyau
 
@@ -154,4 +155,3 @@ Le worker contient la boucle SQS de gleaner. Le traitement d'une unité vient de
 
 - **Mettre à jour les limites du worker** quand il tourne déjà et que core renvoie un `start` avec d'autres valeurs (`docker update`).
 - **Le worker** (image et boucle SQS) et le rôle IAM qui lui donne accès à SQS.
-- **La même boucle existe pour la mémoire** : une tâche qui consomme beaucoup de mémoire fait baisser la mémoire libre sous 1 Go, et core renvoie `stop`. Il faudrait aussi envoyer la mémoire utilisée par la tâche.

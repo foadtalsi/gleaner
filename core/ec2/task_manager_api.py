@@ -18,6 +18,7 @@ class HeartbeatData(BaseModel):
     timestamp: int
     period_seconds: float  # durée couverte par la mesure
     client_cpu_percent: float  # % du cpu de la machine utilise par l'application du client (sans nos taches), calcule par l'agent
+    client_mem_free_mb: int  # memoire libre si nos taches n'etaient pas la, calculee par l'agent
 
 
 # l'agent envoie ses mesures, core les garde, compte le gaspillage, et repond avec un Order (start / stop)

@@ -35,6 +35,7 @@ class HeartbeatData(BaseModel):
     timestamp: int
     period_seconds: float  # durée couverte par la mesure
     client_cpu_percent: float  # % du cpu de la machine utilise par l'application du client (sans nos taches)
+    client_mem_free_mb: int = None  # memoire libre de l'application du client, si elle est connue (sinon None)
 
 # ordre recu de core dans la reponse au heartbeat, doit rester identique a l'Order de core/ec2/scheduler.py
 class Order(BaseModel):
@@ -45,19 +46,25 @@ class Order(BaseModel):
 # -------------------------------------------------------------------------------------------------------------------------
 
 
-def get_instance_data(period_seconds):
-    # donne les mesures de l'instance, pour le heartbeat a envoyer a core
+def get_instance_data(period_seconds): # donne les mesures de l'instance, pour le heartbeat a envoyer a core
     cpu_used = psutil.cpu_percent(interval=None)
+    memory_free = psutil.virtual_memory().available // (1024 * 1024)  # convertit en Mo
+
     task_cpu = get_task_cpu_percent() or 0  # cpu de nos taches, pour que core ne le confonde pas avec celui du client
+    task_memory = get_task_memory_mb() or 0  # memoire de nos taches, pour que core ne le confonde pas avec celle du client
+
     # max(0) : les deux mesures ne couvrent pas la meme duree (periode entiere / ~1 s), la difference peut etre negative
-    client_cpu = max(0, cpu_used - task_cpu)
+    client_cpu_left = max(0, cpu_used - task_cpu) # cpu libre de l'application du client, sans nos taches et les siennes
+    client_memory_left = memory_free + task_memory # memoire qui serait libre sans nos taches (celle qu'elles occupent est rendue des qu'on les arrete)
+
     return HeartbeatData(
         cpu_free_percent=round(100 - cpu_used, 1),
         mem_free_mb=psutil.virtual_memory().available // (1024 * 1024),
         vcpus=psutil.cpu_count(),
         timestamp=int(time.time()),
         period_seconds=round(period_seconds, 2),
-        client_cpu_percent=round(client_cpu, 1),
+        client_cpu_percent=round(client_cpu_left, 1),
+        client_mem_free_mb=client_memory_left
     )
 
 
@@ -75,8 +82,8 @@ def send_heartbeat(data: HeartbeatData):
     return Order.model_validate(response.json())  # convertit l'action que il doit faire qui est dans "response" en objet Order et la return pour que la boucle "while True" puisse savoir quelle action faire
 
 
-def get_task_cpu_percent():
-    # retourne le pourcentage de CPU de la machine pris par la task, ou None si elle n'est pas en cours
+def get_task_cpu_percent(): # retourne le pourcentage de CPU de la machine pris par la task, ou None si elle n'est pas en cours
+   
     try:
         stats = docker.from_env().containers.get("gleaner-task").stats(stream=False)
     except docker.errors.NotFound:
@@ -92,6 +99,16 @@ def get_task_cpu_percent():
     machine_cpu = after["system_cpu_usage"] - before["system_cpu_usage"]  # temps cpu total de la machine
 
     return round(task_cpu / machine_cpu * 100, 1)
+
+def get_task_memory_mb(): # retourne la memoire de la machine prise par la task, ou None si elle n'est pas en cours
+    try:
+        stats = docker.from_env().containers.get("gleaner-task").stats(stream=False)
+    except docker.errors.NotFound:
+        return None
+    if "usage" not in stats["memory_stats"]:
+        return None  # tache deja terminee : docker n'a plus de releve memoire
+
+    return stats["memory_stats"]["usage"] // (1024 * 1024)  # convertit en Mo
 
 
 # Premier appel pour démarrer la mesure, sa valeur n'a pas de sens

@@ -33,10 +33,12 @@ def get_ready_instances():
 
 def choose_container_action(instance_id, data):
     # dit l'ec2 si elle doit lancer une tache ou pas, en fonction du cpu du client et de la ram libre
+
     client_cpu = data.client_cpu_percent  # envoye par l'agent, sans le cpu de nos taches
+    client_memory = data.client_mem_free_mb  # envoye par l'agent, sans la memoire de nos taches
     last_order = last_orders.get(instance_id)
 
-    if data.mem_free_mb < MIN_MEM_FREE_MB or client_cpu > STOP_CPU_USED_PERCENT:
+    if client_memory < MIN_MEM_FREE_MB or client_cpu > STOP_CPU_USED_PERCENT:
         order = Order(action="stop")
 
     elif client_cpu >= MAX_CPU_USED_PERCENT:
@@ -49,7 +51,7 @@ def choose_container_action(instance_id, data):
             order = Order(action="stop")
             
         else:
-            order = Order(action="start", cpus=cpus, memory_mb=data.mem_free_mb - RESERVED_MEM_MB)
+            order = Order(action="start", cpus=cpus, memory_mb=client_memory - RESERVED_MEM_MB)
 
     last_orders[instance_id] = order  # retenu pour la zone 70-90 du prochain heartbeat
     return order
