@@ -123,9 +123,9 @@ On avance étape par étape. Avant les premiers clients, on ne fait que ce qui e
 | 2 | Enregistrement du CPU gaspillé : calcul par core à chaque heartbeat, route `GET /waste/{instance_id}` avec le coût. | ✅ |
 | 3 | File SQS et dead-letter queue en Terraform. | ✅ déployée (us-east-1) |
 | 4 | Worker dans l'agent : lit SQS tâche par tâche et lance l'image de l'ingénieur avec les limites CPU et mémoire. | ✅ testé avec la vraie file |
-| 5 | **Ne jamais gêner l'application du client** : régler la boucle stop/start (core doit distinguer le CPU du client de celui des tâches gleaner), arrêter la tâche quand core est injoignable, nettoyer une tâche orpheline au redémarrage de l'agent, vérifier qu'un message tué revient bien dans la file. | ⬜ |
+| 5 | **Ne jamais gêner l'application du client** : régler la boucle stop/start (core doit distinguer le CPU du client de celui des tâches gleaner), arrêter la tâche quand core est injoignable, nettoyer une tâche orpheline au redémarrage de l'agent, vérifier qu'un message tué revient bien dans la file. | ✅ testé avec la vraie file |
 | 6 | **Héberger core** pour que les agents puissent le joindre. | ⬜ |
-| 7 | **Installation sur EC2** : rôle IAM (droits SQS) et *hop limit* des métadonnées à 2, `INSTANCE_ID` lu dans les métadonnées de l'instance, image de l'agent publiée. | ⬜ |
+| 7 | **Installation sur EC2** : rôle de l'EC2 minimal (droits SQS + droit d'emprunter le rôle de la tâche), **un rôle IAM par tâche** emprunté par le worker à chaque unité (`sts:AssumeRole`, identifiants de **15 min** passés au conteneur), agent lancé en `--network host` avec le *hop limit* des métadonnées laissé à 1 pour que les tâches ne voient jamais le rôle de l'EC2, `INSTANCE_ID` lu dans les métadonnées de l'instance, image de l'agent publiée. | ⬜ |
 | 8 | **Sécurité** : HTTPS entre l'agent et core, une clé par client. | ⬜ |
 | 9 | **Gaspillage stocké dans DynamoDB**, pour qu'il survive aux redémarrages de core. Une fois core terminé. | ⬜ |
 | 10 | **ECS**, une fois EC2 entièrement terminé. | ⬜ |
