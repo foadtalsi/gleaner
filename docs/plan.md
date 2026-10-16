@@ -131,3 +131,30 @@ On avance étape par étape. Avant les premiers clients, on ne fait que ce qui e
 | 10 | **ECS**, une fois EC2 entièrement terminé. | ⬜ |
 
 **Plus tard (utile, mais pas critique pour les premiers clients)** : une file par tâche, l'interface web, le prix du vCPU·heure via l'API AWS, le catalogue de tâches préfaites, le suivi de l'avancement d'une tâche.
+
+## Idées à ajouter plus tard
+
+Deux idées notées le 2026-10-16, avant une pause du projet. Elles ne sont pas encore conçues : ce qui suit est seulement ce qui est déjà décidé et les questions à trancher.
+
+### Attribution du rôle IAM des tâches
+
+**Le mécanisme est décidé** (étape 7) : chaque tâche a son propre rôle IAM, que le worker emprunte à chaque unité (`sts:AssumeRole`, identifiants de 15 min passés au conteneur). Le rôle de l'EC2 ne reçoit jamais les droits des tâches.
+
+**L'idée : décider comment une tâche reçoit son rôle**, c'est-à-dire qui le crée, qui choisit ses droits, et comment gleaner le connaît. Aujourd'hui, le plus simple serait que l'ingénieur crée le rôle lui-même et donne son ARN (`TASK_ROLE_ARN`) avec son image.
+
+**À trancher :**
+- Qui crée le rôle : l'ingénieur à la main, ou gleaner à sa place ?
+- Comment gleaner apprend quel rôle va avec quelle tâche (variable d'environnement, interface web, core).
+- Comment s'assurer que les droits restent minimaux (un seul bucket, un seul dossier…).
+
+### Découpage des tâches par un LLM
+
+**Aujourd'hui, c'est l'ingénieur qui découpe sa tâche en unités** et les envoie dans SQS (voir « Le producteur » et « Tâches découpées et file SQS »). gleaner ne fait pas de découpage.
+
+**L'idée : un LLM découpe la tâche en unités à la place de l'ingénieur.** Cela changerait la règle actuelle « gleaner ne découpe pas ».
+
+**À trancher :**
+- Ce que l'ingénieur fournit au LLM (une description en texte, son code, la liste des données à traiter…).
+- Ce que produit le LLM (directement les messages SQS, ou une proposition que l'ingénieur valide).
+- Comment garantir que les unités produites respectent les « Règles pour les unités » (courtes, indépendantes, rejouables sans effet de bord).
+- Quel modèle utiliser et ce que coûte un découpage.
