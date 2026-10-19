@@ -109,7 +109,7 @@ docker run -d --name gleaner-agent --restart unless-stopped --network host \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e CORE_URL=${var.core_url} \
   -e INSTANCE_ID=$INSTANCE_ID \
-  -e AWS_REGION=${var.region} \
+  -e AWS_DEFAULT_REGION=${var.region} \
   -e QUEUE_URL=${aws_sqs_queue.task_queue.url} \
   -e TASK_IMAGE=${var.task_image} \
   gleaner-agent
