@@ -9,7 +9,12 @@ variable "core_url" {
 variable "task_image" {
   description = "Image docker de l'ingenieur lancee pour chaque unite"
   type        = string
-  default     = "alpine"
+  default     = "amazon/aws-cli"
+}
+
+# tache de test : copie entree.txt vers sortie.txt dans le bucket de test, avec le role gleaner-task-exemple
+locals {
+  task_command = "s3 cp s3://${aws_s3_bucket.task_test.bucket}/entree.txt s3://${aws_s3_bucket.task_test.bucket}/sortie.txt"
 }
 
 data "aws_ssm_parameter" "amazon_linux" {
@@ -112,6 +117,7 @@ docker run -d --name gleaner-agent --restart unless-stopped --network host \
   -e AWS_DEFAULT_REGION=${var.region} \
   -e QUEUE_URL=${aws_sqs_queue.task_queue.url} \
   -e TASK_IMAGE=${var.task_image} \
+  -e TASK_COMMAND="${local.task_command}" \
   gleaner-agent
 EOT
   )

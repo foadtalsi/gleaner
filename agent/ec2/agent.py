@@ -42,6 +42,7 @@ class Order(BaseModel):
     action: str
     cpus: Optional[float] = None  # Optional : core envoie null pour un stop
     memory_mb: Optional[int] = None # Optional : core envoie null pour un stop
+    task_iam_role: Optional[str] = None  # role IAM que la tache recoit, choisi par core
 
 # -------------------------------------------------------------------------------------------------------------------------
 
@@ -121,7 +122,7 @@ last_core_response = time.monotonic()  # derniere fois que core a repondu
 while True:
     time.sleep(INTERVAL)
     now = time.monotonic()
-    order: Order = send_heartbeat(get_instance_data(now - last_measure))
+    order: Order = send_heartbeat(get_instance_data(now - last_measure)) # c'est ici que on envoie, et recoit l'ordre de core
     last_measure = now
 
     if order is not None:
@@ -137,7 +138,7 @@ while True:
         
         try:
             if order.action == "start":
-                worker.start(order.cpus, order.memory_mb)
+                worker.start(order.cpus, order.memory_mb, order.task_iam_role)
 
             elif order.action == "stop":
                 worker.stop()

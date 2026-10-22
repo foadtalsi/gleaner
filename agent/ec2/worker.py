@@ -13,16 +13,19 @@ TASK_COMMAND = os.environ.get("TASK_COMMAND")  # None : on garde le CMD de l'ima
 TASK_NAME = "gleaner-task"  # nom fixe, pour que l'agent retrouve le conteneur
 
 sqs = boto3.client("sqs")
+sts = boto3.client("sts")
 docker_client = docker.from_env()
 
 
 class Worker:
     def __init__(self):
         self.limits = None  # (cpus, memory_mb) recus de core, None = en pause
+        self.task_iam_role = None  # role IAM de la tache, recu de core dans l'Order
 
-    def start(self, cpus, memory_mb):
+    def start(self, cpus, memory_mb, task_iam_role):
         # les nouvelles limites s'appliquent a partir de la tache suivante
         self.limits = (cpus, memory_mb)
+        self.task_iam_role = task_iam_role
 
     def stop(self):
         self.limits = None
@@ -43,7 +46,11 @@ class Worker:
             if self.limits is None: # regarde si limite a une valeur, si y'en a sa veut dire que agent.py a recu start() de core, donc on peut commencer, mais si c'est None alors ya rien et on attend 1 seconde
                 time.sleep(1)  # en pause, on attend un start
                 continue
+
             try:
+                # identifiants temporaires du role de la tache, valables 15 min : seule la tache les recoit
+                credentials = sts.assume_role(RoleArn=self.task_iam_role, RoleSessionName="gleaner-task", DurationSeconds=900)["Credentials"]
+
                 response = sqs.receive_message(QueueUrl=QUEUE_URL, WaitTimeSeconds=10)
                 for message in response.get("Messages", []):
                     current = self.limits
@@ -57,7 +64,13 @@ class Worker:
                             TASK_COMMAND,
                             name=TASK_NAME,
                             remove=True,
-                            environment={"GLEANER_TASK": message["Body"]},
+                            environment={
+                                "GLEANER_TASK": message["Body"],
+                                "AWS_ACCESS_KEY_ID": credentials["AccessKeyId"],
+                                "AWS_SECRET_ACCESS_KEY": credentials["SecretAccessKey"],
+                                "AWS_SESSION_TOKEN": credentials["SessionToken"],
+                                "AWS_DEFAULT_REGION": os.environ["AWS_DEFAULT_REGION"],
+                            },
                             nano_cpus=int(cpus * 1e9),  # equivalent de --cpus
                             mem_limit=f"{memory_mb}m",  # equivalent de --memory
                             cpu_shares=2,  # priorite cpu minimale (1024 par defaut) : sous contention, le noyau donne le cpu a l'application du client

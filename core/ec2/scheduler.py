@@ -1,5 +1,7 @@
 # decide si le worker doit tourner sur une instance, et avec quelles limites
 # l'Order choisi est renvoye a l'agent dans la reponse au heartbeat (voir task_manager_api.py)
+from typing import Optional
+
 from instances import instance_data
 from pydantic import BaseModel
 
@@ -12,11 +14,14 @@ MIN_CPUS = 0.1  # en dessous, le conteneur n'aurait pas assez de cpu pour etre u
 
 last_orders = {}  # dernier ordre envoye a chaque instance, pour savoir si une tache tourne deja
 
+task_iam_roles = "arn:aws:iam::454492134174:role/gleaner-task-exemple" # TEMPORAIRE, IL FAUT UN LLM POUR CHOISIR LE ROLE IAM POUR LA TACHE, LA C'EST HARDCODED
+
 # ordre renvoye a l'agent, doit rester identique a l'Order de agent/ec2/agent.py
 class Order(BaseModel):
     action: str
     cpus: float = None
     memory_mb: int = None
+    task_iam_role: Optional[str] = None  # IAM role a utiliser pour la tache, si elle est specifiee dans le fichier de config du worker
 
 def is_ready(data):
     return data.client_cpu_percent < MAX_CPU_USED_PERCENT and data.mem_free_mb >= MIN_MEM_FREE_MB
@@ -51,7 +56,7 @@ def choose_container_action(instance_id, data):
             order = Order(action="stop")
             
         else:
-            order = Order(action="start", cpus=cpus, memory_mb=client_memory - RESERVED_MEM_MB)
+            order = Order(action="start", cpus=cpus, memory_mb=client_memory - RESERVED_MEM_MB, task_iam_role=task_iam_roles)  # LE task_iam_role est hardcode pour l'instant
 
     last_orders[instance_id] = order  # retenu pour la zone 70-90 du prochain heartbeat
     return order

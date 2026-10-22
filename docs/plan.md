@@ -138,23 +138,27 @@ Deux idées notées le 2026-10-16, avant une pause du projet. Elles ne sont pas 
 
 ### Attribution du rôle IAM des tâches
 
-**Le mécanisme est décidé** (étape 7) : chaque tâche a son propre rôle IAM, que le worker emprunte à chaque unité (`sts:AssumeRole`, identifiants de 15 min passés au conteneur). Le rôle de l'EC2 ne reçoit jamais les droits des tâches.
+**Le mécanisme est décidé** (étape 7) : le worker emprunte le rôle de la tâche à chaque unité (`sts:AssumeRole`, identifiants de 15 min passés au conteneur). Le rôle de l'EC2 ne reçoit jamais les droits des tâches.
 
-**L'idée : décider comment une tâche reçoit son rôle**, c'est-à-dire qui le crée, qui choisit ses droits, et comment gleaner le connaît. Aujourd'hui, le plus simple serait que l'ingénieur crée le rôle lui-même et donne son ARN (`TASK_ROLE_ARN`) avec son image.
+**Décidé le 2026-10-19 : un LLM choisit le rôle dans une liste fermée, un humain valide.**
+
+1. **Le client définit à l'avance une liste de rôles autorisés**, chacun avec des droits précis (ex. `lecture-s3-photos`, `ecriture-s3-resultats`). Aucun autre rôle ne peut être utilisé : le pire cas possible est le rôle le plus large de la liste.
+2. **Le LLM lit la description de la tâche** (seulement la description) et choisit le rôle de la liste qui correspond.
+3. **Un humain voit le rôle choisi par le LLM et peut le changer** avant de lancer la tâche. Le LLM ne décide jamais seul : une erreur de choix ou une injection de prompt dans la description est rattrapée à cette validation.
 
 **À trancher :**
-- Qui crée le rôle : l'ingénieur à la main, ou gleaner à sa place ?
-- Comment gleaner apprend quel rôle va avec quelle tâche (variable d'environnement, interface web, core).
-- Comment s'assurer que les droits restent minimaux (un seul bucket, un seul dossier…).
+- Où le client définit la liste (fichier, Terraform, interface web) et où elle est stockée.
+- Où l'humain valide (interface web, ligne de commande).
+- Quel modèle utiliser.
 
 ### Découpage des tâches par un LLM
 
 **Aujourd'hui, c'est l'ingénieur qui découpe sa tâche en unités** et les envoie dans SQS (voir « Le producteur » et « Tâches découpées et file SQS »). gleaner ne fait pas de découpage.
 
-**L'idée : un LLM découpe la tâche en unités à la place de l'ingénieur.** Cela changerait la règle actuelle « gleaner ne découpe pas ».
+**Décidé le 2026-10-19 : c'est le même LLM qui choisit le rôle et qui découpe la tâche**, à partir de sa description. Cela change la règle actuelle « gleaner ne découpe pas ».
 
 **À trancher :**
-- Ce que l'ingénieur fournit au LLM (une description en texte, son code, la liste des données à traiter…).
-- Ce que produit le LLM (directement les messages SQS, ou une proposition que l'ingénieur valide).
+- **D'où le LLM connaît les données à découper.** La description dit *quoi* faire (« redimensionner les images du bucket mes-photos »), mais pas la liste des 10 000 fichiers : il faudra lister les données (ex. les objets du bucket) pour produire une unité par élément.
+- Si l'humain valide aussi le découpage, en même temps que le rôle.
 - Comment garantir que les unités produites respectent les « Règles pour les unités » (courtes, indépendantes, rejouables sans effet de bord).
-- Quel modèle utiliser et ce que coûte un découpage.
+- Ce que coûte un découpage.
