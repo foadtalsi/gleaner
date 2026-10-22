@@ -6,6 +6,12 @@ variable "core_url" {
   type        = string
 }
 
+variable "agent_image" {
+  description = "Image publique de l'agent, publiee par core/registry"
+  type        = string
+  default     = "public.ecr.aws/a3i1n1h9/gleaner-agent:v0.1"
+}
+
 variable "task_image" {
   description = "Image docker de l'ingenieur lancee pour chaque unite"
   type        = string
@@ -82,45 +88,26 @@ resource "aws_instance" "agent" {
     http_put_response_hop_limit = 1
   }
 
-  # au demarrage : installe docker, copie le code de l'agent, construit l'image et lance l'agent
-  # compresse avec gzip : sinon le code de l'agent depasse la limite de 16 Ko des user_data
+  # au demarrage : installe docker, telecharge l'image publique de l'agent et la lance
   user_data_replace_on_change = true
-  # le script est ecrit en colonne 0 : bash exige le #!/bin/bash et les GLEANER_EOF en debut de ligne
-  user_data_base64 = base64gzip(<<EOT
-#!/bin/bash
-dnf install -y docker
-systemctl enable --now docker
+  user_data                   = <<-EOT
+    #!/bin/bash
+    dnf install -y docker
+    systemctl enable --now docker
 
-mkdir -p /opt/gleaner-agent
-cd /opt/gleaner-agent
-cat > agent.py <<'GLEANER_EOF'
-${file("${path.module}/../../agent/ec2/agent.py")}
-GLEANER_EOF
-cat > worker.py <<'GLEANER_EOF'
-${file("${path.module}/../../agent/ec2/worker.py")}
-GLEANER_EOF
-cat > requirements.txt <<'GLEANER_EOF'
-${file("${path.module}/../../agent/ec2/requirements.txt")}
-GLEANER_EOF
-cat > Dockerfile <<'GLEANER_EOF'
-${file("${path.module}/../../agent/ec2/Dockerfile")}
-GLEANER_EOF
-docker build -t gleaner-agent .
+    TOKEN=$(curl -s -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+    INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
 
-TOKEN=$(curl -s -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
-INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)
-
-docker run -d --name gleaner-agent --restart unless-stopped --network host \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -e CORE_URL=${var.core_url} \
-  -e INSTANCE_ID=$INSTANCE_ID \
-  -e AWS_DEFAULT_REGION=${var.region} \
-  -e QUEUE_URL=${aws_sqs_queue.task_queue.url} \
-  -e TASK_IMAGE=${var.task_image} \
-  -e TASK_COMMAND="${local.task_command}" \
-  gleaner-agent
-EOT
-  )
+    docker run -d --name gleaner-agent --restart unless-stopped --network host \
+      -v /var/run/docker.sock:/var/run/docker.sock \
+      -e CORE_URL=${var.core_url} \
+      -e INSTANCE_ID=$INSTANCE_ID \
+      -e AWS_DEFAULT_REGION=${var.region} \
+      -e QUEUE_URL=${aws_sqs_queue.task_queue.url} \
+      -e TASK_IMAGE=${var.task_image} \
+      -e TASK_COMMAND="${local.task_command}" \
+      ${var.agent_image}
+  EOT
 
   tags = {
     Name = "gleaner-agent-test"

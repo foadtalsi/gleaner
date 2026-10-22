@@ -3,3 +3,4 @@ __pycache__/
 core/infra/.terraform/
 *.tfstate
 *.tfstate.*
+core/registry/.terraform/
