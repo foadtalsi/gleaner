@@ -4,3 +4,4 @@ core/infra/.terraform/
 *.tfstate
 *.tfstate.*
 core/registry/.terraform/
+core/hosting/.terraform/
