@@ -11,7 +11,7 @@
 #     -e QUEUE_URL=<url de la file SQS> \
 #     -e TASK_IMAGE=<image de l'ingenieur> \
 #     -e TASK_COMMAND="<commande>" \
-#     -e AWS_REGION=eu-west-3 \
+#     -e AWS_DEFAULT_REGION=us-east-1 \
 #     gleaner-agent
 #
 # Le socket Docker est monte pour que le worker puisse lancer et tuer les conteneurs de l'ingenieur.

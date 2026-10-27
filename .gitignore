@@ -5,3 +5,4 @@ core/infra/.terraform/
 *.tfstate.*
 core/registry/.terraform/
 core/hosting/.terraform/
+.env

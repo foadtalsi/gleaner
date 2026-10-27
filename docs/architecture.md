@@ -51,15 +51,13 @@ Les deux modèles sont **définis deux fois**, une fois dans l'agent et une fois
 Défini dans `agent/ec2/agent.py` et `core/ec2/task_manager_api.py`.
 
 ```json
-{"cpu_free_percent": 72.5, "mem_free_mb": 3100, "vcpus": 4, "timestamp": 1759600000, "period_seconds": 5.0}
+{"cpu_free_percent": 72.5, "vcpus": 4, "period_seconds": 5.0, "client_cpu_percent": 20.1, "client_mem_free_mb": 3100, "agent_key": "..."}
 ```
 
 | Champ | Sens |
 |---|---|
 | `cpu_free_percent` | % du CPU de toute la machine resté libre pendant la période |
-| `mem_free_mb` | mémoire disponible, en Mo |
 | `vcpus` | nombre de vCPU de la machine |
-| `timestamp` | heure de la mesure (secondes Unix) |
 | `period_seconds` | durée couverte par la mesure, utilisée pour le calcul du gaspillage |
 | `client_cpu_percent` | % du CPU de la machine utilisé par l'application du client, **sans nos tâches**. Calculé par l'agent : CPU utilisé de la machine − CPU de `gleaner-task` (mesuré avec l'API Docker, sur ~1 s), ramené à 0 s'il est négatif |
 | `client_mem_free_mb` | mémoire qui serait libre **sans nos tâches** : mémoire disponible de la machine + mémoire de `gleaner-task` (mesurée avec l'API Docker). Calculée par l'agent |

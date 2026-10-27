@@ -26,16 +26,17 @@ INSTANCE_ID = os.environ.get("INSTANCE_ID", "local-dev")  # sur une vraie EC2, v
 INTERVAL = float(os.environ.get("INTERVAL", "5"))  # secondes entre deux envois
 CORE_TIMEOUT = float(os.environ.get("CORE_TIMEOUT", "15"))  # secondes sans reponse de core avant d'arreter la tache
 
+AGENT_KEY = "agent_1_key" # plus tard elle sera recuperer de dynamodb, pas en dur dans le code
+
 
 # message envoye a core, doit rester identique au HeartbeatData de core/ec2/task_manager_api.py
 class HeartbeatData(BaseModel):
     cpu_free_percent: float
-    mem_free_mb: int
     vcpus: int
-    timestamp: int
     period_seconds: float  # durée couverte par la mesure
     client_cpu_percent: float  # % du cpu de la machine utilise par l'application du client (sans nos taches)
-    client_mem_free_mb: int = None  # memoire libre de l'application du client, si elle est connue (sinon None)
+    client_mem_free_mb: int  # memoire qui serait libre si nos taches n'etaient pas la
+    agent_key: str  # pour que core sache que c'est bien l'agent qui envoie le heartbeat, et pas un intrus
 
 # ordre recu de core dans la reponse au heartbeat, doit rester identique a l'Order de core/ec2/scheduler.py
 class Order(BaseModel):
@@ -51,27 +52,26 @@ def get_instance_data(period_seconds): # donne les mesures de l'instance, pour l
     cpu_used = psutil.cpu_percent(interval=None)
     memory_free = psutil.virtual_memory().available // (1024 * 1024)  # convertit en Mo
 
-    task_cpu = get_task_cpu_percent() or 0  # cpu de nos taches, pour que core ne le confonde pas avec celui du client
-    task_memory = get_task_memory_mb() or 0  # memoire de nos taches, pour que core ne le confonde pas avec celle du client
+    task_cpu, task_memory = get_task_usage()  # ce que prennent nos taches, pour que core ne le confonde pas avec l'application du client
 
     # max(0) : les deux mesures ne couvrent pas la meme duree (periode entiere / ~1 s), la difference peut etre negative
-    client_cpu_left = max(0, cpu_used - task_cpu) # cpu libre de l'application du client, sans nos taches et les siennes
-    client_memory_left = memory_free + task_memory # memoire qui serait libre sans nos taches (celle qu'elles occupent est rendue des qu'on les arrete)
+    client_cpu_used = max(0, cpu_used - task_cpu) # cpu utilise par l'application du client, sans nos taches
+    client_memory_free = memory_free + task_memory # memoire qui serait libre sans nos taches (celle qu'elles occupent est rendue des qu'on les arrete)
 
     return HeartbeatData(
         cpu_free_percent=round(100 - cpu_used, 1),
-        mem_free_mb=psutil.virtual_memory().available // (1024 * 1024),
         vcpus=psutil.cpu_count(),
-        timestamp=int(time.time()),
         period_seconds=round(period_seconds, 2),
-        client_cpu_percent=round(client_cpu_left, 1),
-        client_mem_free_mb=client_memory_left
+        client_cpu_percent=round(client_cpu_used, 1),
+        client_mem_free_mb=client_memory_free,
+        agent_key=AGENT_KEY
     )
 
 
 def send_heartbeat(data: HeartbeatData):
     # envoie les mesures a core et retourne l'Order qu'il renvoie, ou None si core est injoignable
     url = f"{CORE_URL}/heartbeat/{INSTANCE_ID}"
+    
     try:
         response = requests.post(url, json=data.model_dump(), timeout=3)
         response.raise_for_status()
@@ -83,33 +83,26 @@ def send_heartbeat(data: HeartbeatData):
     return Order.model_validate(response.json())  # convertit l'action que il doit faire qui est dans "response" en objet Order et la return pour que la boucle "while True" puisse savoir quelle action faire
 
 
-def get_task_cpu_percent(): # retourne le pourcentage de CPU de la machine pris par la task, ou None si elle n'est pas en cours
-   
+def get_task_usage(): # retourne (% du CPU de la machine, memoire en Mo) pris par la task, 0 pour ce que docker ne mesure pas
     try:
-        stats = docker.from_env().containers.get("gleaner-task").stats(stream=False)
+        stats = docker.from_env().containers.get("gleaner-task").stats(stream=False)  # un seul appel : il prend ~1 s
     except docker.errors.NotFound:
-        return None
+        return 0, 0  # aucune tache en cours
 
+    task_cpu_percent = 0
     # docker donne deux releves a ~1 s d'intervalle : "precpu_stats" (avant) et "cpu_stats" (apres)
     after = stats["cpu_stats"]
     before = stats["precpu_stats"]
-    if "system_cpu_usage" not in after or "system_cpu_usage" not in before:
-        return None  # tache deja terminee (ou tout juste lancee) : docker n'a pas de releve cpu
+    if "system_cpu_usage" in after and "system_cpu_usage" in before:  # absent si la tache est deja terminee (ou tout juste lancee)
+        task_cpu = after["cpu_usage"]["total_usage"] - before["cpu_usage"]["total_usage"]  # temps cpu pris par la tache
+        machine_cpu = after["system_cpu_usage"] - before["system_cpu_usage"]  # temps cpu total de la machine
+        task_cpu_percent = round(task_cpu / machine_cpu * 100, 1)
 
-    task_cpu = after["cpu_usage"]["total_usage"] - before["cpu_usage"]["total_usage"]  # temps cpu pris par la tache
-    machine_cpu = after["system_cpu_usage"] - before["system_cpu_usage"]  # temps cpu total de la machine
+    task_memory_mb = 0
+    if "usage" in stats["memory_stats"]:  # absent si la tache est deja terminee
+        task_memory_mb = stats["memory_stats"]["usage"] // (1024 * 1024)  # convertit en Mo
 
-    return round(task_cpu / machine_cpu * 100, 1)
-
-def get_task_memory_mb(): # retourne la memoire de la machine prise par la task, ou None si elle n'est pas en cours
-    try:
-        stats = docker.from_env().containers.get("gleaner-task").stats(stream=False)
-    except docker.errors.NotFound:
-        return None
-    if "usage" not in stats["memory_stats"]:
-        return None  # tache deja terminee : docker n'a plus de releve memoire
-
-    return stats["memory_stats"]["usage"] // (1024 * 1024)  # convertit en Mo
+    return task_cpu_percent, task_memory_mb
 
 
 # Premier appel pour démarrer la mesure, sa valeur n'a pas de sens

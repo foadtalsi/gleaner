@@ -124,13 +124,80 @@ On avance étape par étape. Avant les premiers clients, on ne fait que ce qui e
 | 3 | File SQS et dead-letter queue en Terraform. | ✅ déployée (us-east-1) |
 | 4 | Worker dans l'agent : lit SQS tâche par tâche et lance l'image de l'ingénieur avec les limites CPU et mémoire. | ✅ testé avec la vraie file |
 | 5 | **Ne jamais gêner l'application du client** : régler la boucle stop/start (core doit distinguer le CPU du client de celui des tâches gleaner), arrêter la tâche quand core est injoignable, nettoyer une tâche orpheline au redémarrage de l'agent, vérifier qu'un message tué revient bien dans la file. | ✅ testé avec la vraie file |
-| 6 | **Héberger core** pour que les agents puissent le joindre. | ⬜ |
+| 6 | **Héberger core** pour que les agents puissent le joindre : EC2 `t3.micro` (`core/hosting/`), Elastic IP, domaine `api.talsi.dev`. | ✅ testé avec une EC2 d'agent (arrêté en attendant la clé par client) |
 | 7 | **Installation sur EC2** : rôle de l'EC2 minimal (droits SQS + droit d'emprunter le rôle de la tâche), **un rôle IAM par tâche** emprunté par le worker à chaque unité (`sts:AssumeRole`, identifiants de **15 min** passés au conteneur), agent lancé en `--network host` avec le *hop limit* des métadonnées laissé à 1 pour que les tâches ne voient jamais le rôle de l'EC2, `INSTANCE_ID` lu dans les métadonnées de l'instance, image de l'agent publiée. | ✅ testé sur une vraie EC2 (image `public.ecr.aws/a3i1n1h9/gleaner-agent:v0.1`) |
-| 8 | **Sécurité** : HTTPS entre l'agent et core, une clé par client. | ⬜ |
+| 8 | **Sécurité** : HTTPS entre l'agent et core (Caddy, certificat Let's Encrypt), une clé par client. | 🟡 HTTPS fait, clé par client à faire |
 | 9 | **Gaspillage stocké dans DynamoDB**, pour qu'il survive aux redémarrages de core. Une fois core terminé. | ⬜ |
 | 10 | **ECS**, une fois EC2 entièrement terminé. | ⬜ |
 
 **Plus tard (utile, mais pas critique pour les premiers clients)** : une file par tâche, l'interface web, le prix du vCPU·heure via l'API AWS, le catalogue de tâches préfaites, le suivi de l'avancement d'une tâche.
+
+## Hackathon Meta : du 27 octobre au 4 novembre 2026
+
+Rendu le **mercredi 4 novembre**. Crédits : 150 $ sur l'API Llama de Meta. AWS n'est pas couvert par ces crédits (compter environ 10 à 20 $, EC2 allumées seulement pour les tests et la démo).
+
+### Le but
+
+```
+Interface web (https://api.talsi.dev)
+  1. l'utilisateur décrit sa tâche : "redimensionne les photos du bucket demo en 800px"
+  2. core liste les images du bucket
+  3. le LLM propose : le CODE de la tâche + le découpage (lots d'images) + le rôle IAM choisi dans une liste fermée
+  4. l'humain vérifie le code, le découpage et le rôle, peut changer le rôle, puis valide
+  5. core met les lots dans SQS → les agents des EC2 exécutent le code sur chaque lot, avec ce rôle
+  6. l'interface montre l'avancement et le compute récupéré
+```
+
+Démo : **redimensionnement d'images**.
+
+**Décidé le 2026-10-27 : c'est le LLM qui écrit le code de la tâche** (`create_task_code` dans `core/ec2/llm.py`), à partir de sa description. L'ingénieur ne fournit plus son image Docker. Conséquences :
+- **Une image gleaner générique** (Python + `boto3` + `Pillow`) exécute le code généré. Le code ne peut utiliser que ces bibliothèques.
+- **Le code ne traite qu'une unité** : il la lit dans la variable `GLEANER_TASK`, et ne liste pas lui-même tout le bucket.
+- **L'humain valide aussi le code** avant le lancement : il tourne sur la machine du client. Le rôle IAM limite les dégâts si le code est mauvais ou si la description était piégée.
+- **Le code arrive au worker dans chaque message SQS** : `{"resources": [...], "keys": [...], "code": ...}`, environ 6 Ko par message (limite SQS : 256 Ko).
+- **L'ingénieur donne la liste des ressources** de la tâche (`resources`, ex : `s3://bucket/photos/`). Core découpe les fichiers de ces ressources, et le worker limitera le rôle IAM à ces ressources (paramètre `Policy` de `sts.assume_role`) : même un code malveillant ne pourra toucher que ce que l'ingénieur a déclaré.
+- **À trancher le 30 :** distinguer les ressources **à lire** (découpées) de celles **où écrire** (ex : `resized/`). Sinon, soit l'écriture est refusée par le rôle limité, soit core découpe aussi les résultats.
+
+### Le moindre privilège sur les tâches
+
+**Décidé le 2026-10-27**, pour se démarquer au hackathon :
+
+```
+admin        → limite les rôles que chaque personne peut donner
+LLM          → choisit le plus petit rôle parmi ceux-là
+revue        → une autre personne valide le code et le rôle, obligatoirement
+exécution    → rôle limité aux ressources déclarées, identifiants de 15 min
+```
+
+- **Des personnes et des rôles dans le produit** : chaque personne a une clé et une liste de **rôles IAM autorisés**, pris dans la liste fermée du client. Gardé en mémoire (`users`), écrit en dur pour la démo (un admin, deux ingénieurs). Cette clé remplace le `client_key` provisoire.
+- **L'admin modifie les rôles autorisés** de chaque personne (route réservée aux admins, puis page de l'interface). La limite porte sur des **rôles IAM**, pas sur des services AWS : c'est le rôle qui donne réellement les droits. L'interface affiche les services de chaque rôle.
+- **Le LLM ne voit que les rôles autorisés de l'auteur de la tâche**, et core refuse un rôle hors de cette liste.
+- **Revue obligatoire par une autre personne que l'auteur** (règle des « 4 yeux ») : `POST /task` garde la tâche avec l'état `"a_valider"` sans rien envoyer dans SQS. Seule la route `POST /task/{task_id}/validate` appelle `send_task_to_sqs`. Le relecteur voit le code et le rôle, et peut changer le rôle pour un autre rôle autorisé.
+
+### Simplifications pour tenir les délais
+
+- **Une seule tâche active à la fois** et une seule file SQS.
+- **Le LLM ne fabrique pas les unités** : il renvoie un petit JSON (rôle choisi + taille des lots), et c'est **core qui construit les unités** à partir des images listées. Cela répond à « d'où le LLM connaît les données ».
+- **Core vérifie la réponse du LLM** : un rôle hors de la liste est refusé, et l'humain choisit lui-même.
+- **L'humain valide le code, le rôle et le découpage** dans l'interface web.
+- **Tout reste en mémoire** : ni DynamoDB ni ECS pendant le hackathon.
+- **L'interface est une simple page HTML** servie par FastAPI.
+- **C'est l'interface web qui crée la tâche** : elle envoie à core (`POST /task`) l'identifiant de la tâche, sa description et la clé du client. Core ne fabrique pas l'identifiant, il garde celui qu'il reçoit. Pour le moment, core vérifie cette clé dans la liste des clés d'agent (`AGENTS_KEY_DIR`) ; une vraie liste de clés client viendra plus tard.
+- **Appels au LLM de Meta (`muse-spark-1.3`, API `api.meta.ai`) avec `requests`**. La clé est dans `core/ec2/.env`, ignoré par git, et chargée en variable d'environnement.
+
+### Planning
+
+| Jour | Contenu | État |
+|---|---|---|
+| Mar. 27 | Premier appel au LLM depuis core (`core/ec2/llm.py`, modèle `muse-spark-1.3` sur `api.meta.ai`). Clés client (fait par Foad). | ✅ appel testé |
+| Mer. 28 | Notion de **tâche** dans core (`POST /task`, champ `resources` donné par l'ingénieur). **Génération du code par le LLM** (`create_task_code`). Découpage en lots de 20 et envoi dans SQS (`send_task_to_sqs`, le code voyage dans chaque message). | ✅ testé le 27 (45 photos → 3 messages) |
+| Jeu. 29 | **Personnes et rôles autorisés** (`users` en mémoire, route admin). **Choix du rôle par le LLM** parmi les rôles autorisés de l'auteur, vérifié par core. | ⬜ |
+| Ven. 30 | **Revue obligatoire** par une autre personne (`POST /task/{task_id}/validate`), seule à envoyer dans SQS. Le worker exécute le code généré dans l'image générique, avec le rôle limité aux ressources. | ⬜ |
+| Sam. 31 | **Interface web** : formulaire, écran de revue (code, rôle, découpage), page admin, suivi. | ⬜ |
+| Dim. 1 | **Image gleaner générique** (Python + boto3 + Pillow, publiée sur ECR Public) et 2 ou 3 rôles de démo en Terraform. | ⬜ |
+| Lun. 2 | **Déploiement** : core sur `api.talsi.dev`, 2 EC2 avec l'agent, un bucket de photos. Test de bout en bout. | ⬜ |
+| Mar. 3 | **Démo solide** et enregistrée : vidéo, README, pitch. | ⬜ |
+| Mer. 4 | **Soumission**, et marge si quelque chose a glissé. | ⬜ |
 
 ## Idées à ajouter plus tard
 
