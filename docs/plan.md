@@ -191,7 +191,7 @@ exécution    → rôle limité aux ressources déclarées, identifiants de 15 m
 |---|---|---|
 | Mar. 27 | Premier appel au LLM depuis core (`core/ec2/llm.py`, modèle `muse-spark-1.3` sur `api.meta.ai`). Clés client (fait par Foad). | ✅ appel testé |
 | Mer. 28 | Notion de **tâche** dans core (`POST /task`, champ `resources` donné par l'ingénieur). **Génération du code par le LLM** (`create_task_code`). Découpage en lots de 20 et envoi dans SQS (`send_task_to_sqs`, le code voyage dans chaque message). | ✅ testé le 27 (45 photos → 3 messages) |
-| Jeu. 29 | **Personnes et rôles autorisés** (`users` en mémoire, route admin). **Choix du rôle par le LLM** parmi les rôles autorisés de l'auteur, vérifié par core. | ⬜ |
+| Jeu. 29 | **Personnes et rôles autorisés** (`users` en mémoire, route admin `PUT /users/{name}/allowed_roles`). **Choix du rôle par le LLM** parmi les rôles autorisés de l'auteur, vérifié par core. `POST /task` garde la tâche avec le code, le rôle et l'état `"a_valider"`, sans rien envoyer dans SQS. Le rôle (son ARN) voyage dans chaque message SQS. | ✅ testé le 28 |
 | Ven. 30 | **Revue obligatoire** par une autre personne (`POST /task/{task_id}/validate`), seule à envoyer dans SQS. Le worker exécute le code généré dans l'image générique, avec le rôle limité aux ressources. | ⬜ |
 | Sam. 31 | **Interface web** : formulaire, écran de revue (code, rôle, découpage), page admin, suivi. | ⬜ |
 | Dim. 1 | **Image gleaner générique** (Python + boto3 + Pillow, publiée sur ECR Public) et 2 ou 3 rôles de démo en Terraform. | ⬜ |

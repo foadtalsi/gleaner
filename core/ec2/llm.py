@@ -2,10 +2,9 @@
 import json
 import os
 from pydantic import BaseModel
-from task_manager_api import tasks
-from task_manager_api import Task
 import requests
 import boto3
+from users import task_possible_roles, users
 
 sqs = boto3.client("sqs")
 s3 = boto3.client("s3")
@@ -23,13 +22,37 @@ def ask_llm(prompt):
     return response.json()["output"][-1]["content"][0]["text"]  # output[0] est la reflexion du modele, le message est le dernier
 
 
-def create_task_code(task : Task):
+def create_task_code(task):
     task_code = ask_llm(f"Tu es un ingenieur logiciel. Ecris le code pour executer la tache suivante : {task.description}. Le code doit etre en Python, le code doit faire en sorte que la tache doit pouvoir etre arreter a n'importe quelle moment, puis repartir sans probleme, le code doit etre complet, avec toutes les fonctions necessaires. Il ne peut utiliser que la bibliotheque standard de Python, boto3 et Pillow. Il ne peut acceder qu'a ces ressources : {task.resources}. Le code ne traite qu'une partie de la tache : il lit dans la variable d'environnement GLEANER_TASK un JSON de la forme {{\"keys\": [\"s3://bucket/photo1.jpg\", \"s3://bucket/photo2.jpg\"]}}, et ne traite que ces fichiers. Il ne liste pas les ressources lui-meme. Si keys est vide, la tache n'a pas de fichiers et le code fait toute la tache. Il doit etre concis, mais clair. Il doit etre robuste, avec gestion des erreurs. Il doit etre optimisé pour la performance et la memoire. Il doit etre compatible avec Python 3.9+. Le code doit etre renvoye sous forme de texte brut, sans explications ni commentaires, le texte que tu vas renvoyer doit etre executable directement dans un editeur de code.")
 
     return task_code
 
 
-def send_task_to_sqs(task: Task, task_code):
+
+
+def choose_task_iam_role(task):
+
+
+    prompt = f"Tu es un ingenieur logiciel. Tu dois choisir le role IAM que la tache suivante doit utiliser : {task.description}. La personne qui a cree la tache a le droit de donner a ses taches les roles suivants : {users[task.user_name]['allowed_roles']}.Les roles possibles sont : {task_possible_roles} Le role choisi doit etre pris dans allowed_roles, et doit permettre a la tache d'acceder aux ressources qu'elle utilise. Renvoie uniquement le nom du role choisi, sans explications ni commentaires."
+
+    task_role = ask_llm(prompt).strip()
+
+    if task_role not in users[task.user_name]["allowed_roles"]: # regarde si le role choisi par le LLM est bien dans la liste des roles que la personne peut donner a ses taches
+        raise ValueError(f"Role non autorise : {task_role}")
+
+    if task_role not in task_possible_roles: # regarde si le role choisi par le LLM est bien dans la liste des roles possibles
+        raise ValueError(f"Role inconnu : {task_role}")
+
+
+
+    return task_role
+
+
+
+
+
+
+def send_task_to_sqs(task, task_code, task_iam_role):
     # liste les fichiers des ressources s3://, les coupe en lots, et envoie un message SQS par lot avec le code
     files = []
     for resource in task.resources:
@@ -46,7 +69,7 @@ def send_task_to_sqs(task: Task, task_code):
         lots.append([])  # tache sans fichiers : un seul message, le code fait toute la tache
 
     for lot in lots:
-        message = {"resources": task.resources, "keys": lot, "code": task_code}
+        message = {"resources": task.resources, "keys": lot, "code": task_code, "iam_role": task_possible_roles[task_iam_role]["arn"]}  # l'ARN : c'est ce que le worker donne a assume_role
         sqs.send_message(QueueUrl=os.environ["QUEUE_URL"], MessageBody=json.dumps(message))
 
     return len(lots)
