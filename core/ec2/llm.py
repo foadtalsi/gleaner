@@ -10,13 +10,14 @@ sqs = boto3.client("sqs")
 s3 = boto3.client("s3")
 
 LOT_SIZE = 20  # fichiers par message SQS, plus tard choisi par le LLM
+MAX_OUTPUT_TOKENS = 16000  # la reflexion du modele compte dedans : trop bas, il ne reste plus rien pour la reponse
 
 
 def ask_llm(prompt):
     response = requests.post(
         "https://api.meta.ai/v1/responses",
         headers={"Authorization": f"Bearer {os.environ['meta_api_key']}"},
-        json={"model": "muse-spark-1.3", "input": prompt},
+        json={"model": "muse-spark-1.3", "input": prompt, "max_output_tokens": MAX_OUTPUT_TOKENS},
     )
     response.raise_for_status()
     return response.json()["output"][-1]["content"][0]["text"]  # output[0] est la reflexion du modele, le message est le dernier

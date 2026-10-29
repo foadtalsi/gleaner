@@ -3,12 +3,13 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from llm import choose_task_iam_role, create_task_code
+from llm import choose_task_iam_role, create_task_code, send_task_to_sqs
 from instances import instance_data
 from scheduler import choose_container_action
 from waste import get_waste_report, record_waste
 from agent_key import AGENTS_KEY_DIR
 from users import task_possible_roles, users
+
 
 app = FastAPI()
 tasks = []  # liste des taches recues de l'interface web, qui seront mises dans la file SQS pour que les agents les recupere
@@ -35,6 +36,10 @@ class Task(BaseModel):
 class AllowedRolesUpdate(BaseModel):
     admin_key: str  # cle de l'admin qui fait la demande
     allowed_roles: list[str]  # la nouvelle liste de roles de la personne, pris dans task_possible_roles
+
+class TaskValidation(BaseModel):
+    validator_name: str # personne qui va valider la tache, le superviseur
+    validator_key: str # key du validateur pour prouver que c'est lui
 
 
 # l'agent envoie ses mesures, core les garde, compte le gaspillage, et repond avec un Order (start / stop)
@@ -74,7 +79,7 @@ def get_waste(instance_id: str):
     return report
 
 
-@app.post("/task") # sert a envoyer une tache a core, qui la mettra dans la file SQS pour que les agents la recupere
+@app.post("/task") # creer une tache a partir de l'interface web, avec le role iam, le code, et la tache est en attente de validation par un superviseur, qui la mettra dans la file SQS pour que les agents la recupere
 def create_task(task: Task):
     # 1. la personne doit exister
     if task.user_name not in users:
@@ -91,7 +96,9 @@ def create_task(task: Task):
     task_code = create_task_code(task)
 
     # 5. la tache attend la revue d'une autre personne : rien ne part dans SQS ici
+
     tasks.append({"task": task, "code": task_code, "role": task_iam_role, "status": "a_valider"})
+
     return {"task_id": task.task_id, "code": task_code, "role": task_iam_role, "status": "a_valider"}
 
 
@@ -122,3 +129,54 @@ def set_allowed_roles(name: str, admin_request: AllowedRolesUpdate):
     # 4. tout est bon : on remplace la liste de la personne
     users[name]["allowed_roles"] = admin_request.allowed_roles
     return {"name": name, "allowed_roles": users[name]["allowed_roles"]}
+
+
+@app.post("/tasks/{task_id}/validate") # sert a faire valider une tache creer par une personne par un superviseur
+def validate_task(task_validation: TaskValidation, task_id: str):
+
+    task_to_validate = None # on connait juste l'id de la tache, pas la tache elle meme donc on peut pas verifier le role iam
+
+    # 1. retrouver la tache garder par core
+
+    for task in tasks:
+        if task["task"].task_id == task_id:
+            task_to_validate = task
+
+    if task_to_validate is None:
+        raise HTTPException(status_code=404, detail="Tâche inconnue")
+
+
+    author_name = task_to_validate["task"].user_name
+    task_role = task_to_validate["role"]
+    validator = task_validation.validator_name
+
+    # 2. le validateur doit exister
+    if validator not in users:
+        raise HTTPException(status_code=403, detail="Validateur inconnu")
+
+    # 3. la cle doit etre la sienne
+    if users[validator]["key"] != task_validation.validator_key:
+        raise HTTPException(status_code=403, detail="Clé du validateur non valide")
+
+    # 4. le validateur ne peut pas etre l'auteur : regle des 4 yeux
+    if validator == author_name:
+        raise HTTPException(status_code=403, detail="L'auteur ne peut pas valider sa propre tâche")
+
+    # 5. la tache ne doit pas deja avoir ete validee, sinon elle partirait deux fois dans SQS
+    if task_to_validate["status"] != "a_valider":
+        raise HTTPException(status_code=400, detail="Tâche déjà validée")
+
+    # 6. le role de la tache doit etre dans les roles autorises de l'auteur
+    if task_role not in users[author_name]["allowed_roles"]:
+        raise HTTPException(status_code=403, detail="Rôle non autorisé pour l'auteur")
+
+
+    # 7. mettre la tache dans la file sqs, puis la valider
+
+    send_task_to_sqs(task=task_to_validate["task"], task_code=task_to_validate["code"], task_iam_role=task_to_validate["role"])
+    task_to_validate["status"] = "validee"
+
+    return {"task_id": task_to_validate["task"].task_id, "code": task_to_validate["code"], "role": task_to_validate["role"], "status": "validee"}
+
+    
+    
