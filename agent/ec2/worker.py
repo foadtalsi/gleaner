@@ -1,4 +1,4 @@
-# gleaner worker: reads tasks from SQS and runs the engineer's image for each one
+# gleaner worker: reads tasks from SQS and runs the code of each one in the generic gleaner image
 # the agent drives it with start() / stop() based on core's orders
 import json
 import os
@@ -9,8 +9,7 @@ import docker
 
 
 QUEUE_URL = os.environ["QUEUE_URL"]
-TASK_IMAGE = os.environ["TASK_IMAGE"]  # engineer's image
-TASK_COMMAND = os.environ.get("TASK_COMMAND")  # None: keep the image's CMD
+TASK_IMAGE = os.environ["TASK_IMAGE"]  # generic gleaner image (Python + boto3 + Pillow) that runs the code written by the LLM
 TASK_NAME = "gleaner-task"  # fixed name, so the agent can find the container
 
 sqs = boto3.client("sqs")
@@ -91,7 +90,7 @@ class Worker:
                         # blocks until the end, raises ContainerError if the exit code is not 0
                         docker_client.containers.run(
                             TASK_IMAGE,
-                            TASK_COMMAND,
+                            ["python", "-c", unit["code"]],  # the task code travels in the message, validated by a reviewer
                             name=TASK_NAME,
                             remove=True,
                             environment={
