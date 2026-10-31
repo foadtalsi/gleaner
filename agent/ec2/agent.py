@@ -1,6 +1,6 @@
-# Agent gleaner : tourne sur l'EC2 du client
-# envoie un heartbeat a core, et execute l'ordre que core renvoie dans la reponse
-# fonctionnement complet : docs/architecture.md
+# gleaner agent: runs on the client's EC2
+# sends a heartbeat to core, and executes the order core sends back in the response
+# full walkthrough: docs/architecture.md
 import os
 import threading
 import time
@@ -15,48 +15,48 @@ from worker import Worker
 
 
 
-# le worker tourne dans un thread a part : une unite longue ne bloque jamais les heartbeats
+# the worker runs in a separate thread: a long unit never blocks the heartbeats
 worker = Worker()
 threading.Thread(target=worker.run_forever, daemon=True).start()
 
 
-# Configuration par variables d'environnement
+# Configuration through environment variables
 CORE_URL = os.environ.get("CORE_URL", "http://localhost:8000")
-INSTANCE_ID = os.environ.get("INSTANCE_ID", "local-dev")  # sur une vraie EC2, viendra de l'IMDS plus tard
-INTERVAL = float(os.environ.get("INTERVAL", "5"))  # secondes entre deux envois
-CORE_TIMEOUT = float(os.environ.get("CORE_TIMEOUT", "15"))  # secondes sans reponse de core avant d'arreter la tache
+INSTANCE_ID = os.environ.get("INSTANCE_ID", "local-dev")  # on a real EC2, will come from the IMDS later
+INTERVAL = float(os.environ.get("INTERVAL", "5"))  # seconds between two sends
+CORE_TIMEOUT = float(os.environ.get("CORE_TIMEOUT", "15"))  # seconds without a response from core before stopping the task
 
-AGENT_KEY = "agent_1_key" # plus tard elle sera recuperer de dynamodb, pas en dur dans le code
+AGENT_KEY = "agent_1_key" # later it will be fetched from dynamodb, not hardcoded in the code
 
 
-# message envoye a core, doit rester identique au HeartbeatData de core/ec2/task_manager_api.py
+# message sent to core, must stay identical to HeartbeatData in core/ec2/task_manager_api.py
 class HeartbeatData(BaseModel):
     cpu_free_percent: float
     vcpus: int
-    period_seconds: float  # durée couverte par la mesure
-    client_cpu_percent: float  # % du cpu de la machine utilise par l'application du client (sans nos taches)
-    client_mem_free_mb: int  # memoire qui serait libre si nos taches n'etaient pas la
-    agent_key: str  # pour que core sache que c'est bien l'agent qui envoie le heartbeat, et pas un intrus
+    period_seconds: float  # duration covered by the measurement
+    client_cpu_percent: float  # % of the machine's cpu used by the client's application (without our tasks)
+    client_mem_free_mb: int  # memory that would be free if our tasks were not there
+    agent_key: str  # so core knows the heartbeat really comes from the agent, and not from an intruder
 
-# ordre recu de core dans la reponse au heartbeat, doit rester identique a l'Order de core/ec2/scheduler.py
+# order received from core in the heartbeat response, must stay identical to the Order in core/ec2/scheduler.py
 class Order(BaseModel):
     action: str
-    cpus: Optional[float] = None  # Optional : core envoie null pour un stop
-    memory_mb: Optional[int] = None # Optional : core envoie null pour un stop
-    task_iam_role: Optional[str] = None  # role IAM que la tache recoit, choisi par core
+    cpus: Optional[float] = None  # Optional: core sends null for a stop
+    memory_mb: Optional[int] = None # Optional: core sends null for a stop
+    task_iam_role: Optional[str] = None  # IAM role the task receives, chosen by core
 
 # -------------------------------------------------------------------------------------------------------------------------
 
 
-def get_instance_data(period_seconds): # donne les mesures de l'instance, pour le heartbeat a envoyer a core
+def get_instance_data(period_seconds): # gives the instance's measurements, for the heartbeat sent to core
     cpu_used = psutil.cpu_percent(interval=None)
-    memory_free = psutil.virtual_memory().available // (1024 * 1024)  # convertit en Mo
+    memory_free = psutil.virtual_memory().available // (1024 * 1024)  # converts to MB
 
-    task_cpu, task_memory = get_task_usage()  # ce que prennent nos taches, pour que core ne le confonde pas avec l'application du client
+    task_cpu, task_memory = get_task_usage()  # what our tasks use, so core doesn't confuse it with the client's application
 
-    # max(0) : les deux mesures ne couvrent pas la meme duree (periode entiere / ~1 s), la difference peut etre negative
-    client_cpu_used = max(0, cpu_used - task_cpu) # cpu utilise par l'application du client, sans nos taches
-    client_memory_free = memory_free + task_memory # memoire qui serait libre sans nos taches (celle qu'elles occupent est rendue des qu'on les arrete)
+    # max(0): the two measurements don't cover the same duration (whole period / ~1 s), the difference can be negative
+    client_cpu_used = max(0, cpu_used - task_cpu) # cpu used by the client's application, without our tasks
+    client_memory_free = memory_free + task_memory # memory that would be free without our tasks (the memory they use is given back as soon as we stop them)
 
     return HeartbeatData(
         cpu_free_percent=round(100 - cpu_used, 1),
@@ -69,60 +69,60 @@ def get_instance_data(period_seconds): # donne les mesures de l'instance, pour l
 
 
 def send_heartbeat(data: HeartbeatData):
-    # envoie les mesures a core et retourne l'Order qu'il renvoie, ou None si core est injoignable
+    # sends the measurements to core and returns the Order it sends back, or None if core is unreachable
     url = f"{CORE_URL}/heartbeat/{INSTANCE_ID}"
     
     try:
         response = requests.post(url, json=data.model_dump(), timeout=3)
         response.raise_for_status()
     except requests.RequestException as e:
-        # core injoignable : on continue, on réessaiera au prochain tour
+        # core unreachable: keep going, we'll retry on the next round
         print(f"Échec de l'envoi à core : {e}", flush=True)
         return None
     print(f"Envoyé : {data}", flush=True)
-    return Order.model_validate(response.json())  # convertit l'action que il doit faire qui est dans "response" en objet Order et la return pour que la boucle "while True" puisse savoir quelle action faire
+    return Order.model_validate(response.json())  # converts the action to perform, which is in "response", into an Order object and returns it so the "while True" loop knows which action to take
 
 
-def get_task_usage(): # retourne (% du CPU de la machine, memoire en Mo) pris par la task, 0 pour ce que docker ne mesure pas
+def get_task_usage(): # returns (% of the machine's CPU, memory in MB) used by the task, 0 for what docker doesn't measure
     try:
-        stats = docker.from_env().containers.get("gleaner-task").stats(stream=False)  # un seul appel : il prend ~1 s
+        stats = docker.from_env().containers.get("gleaner-task").stats(stream=False)  # a single call: it takes ~1 s
     except docker.errors.NotFound:
-        return 0, 0  # aucune tache en cours
+        return 0, 0  # no task running
 
     task_cpu_percent = 0
-    # docker donne deux releves a ~1 s d'intervalle : "precpu_stats" (avant) et "cpu_stats" (apres)
+    # docker gives two readings ~1 s apart: "precpu_stats" (before) and "cpu_stats" (after)
     after = stats["cpu_stats"]
     before = stats["precpu_stats"]
-    if "system_cpu_usage" in after and "system_cpu_usage" in before:  # absent si la tache est deja terminee (ou tout juste lancee)
-        task_cpu = after["cpu_usage"]["total_usage"] - before["cpu_usage"]["total_usage"]  # temps cpu pris par la tache
-        machine_cpu = after["system_cpu_usage"] - before["system_cpu_usage"]  # temps cpu total de la machine
+    if "system_cpu_usage" in after and "system_cpu_usage" in before:  # missing if the task has already finished (or has just started)
+        task_cpu = after["cpu_usage"]["total_usage"] - before["cpu_usage"]["total_usage"]  # cpu time used by the task
+        machine_cpu = after["system_cpu_usage"] - before["system_cpu_usage"]  # total cpu time of the machine
         task_cpu_percent = round(task_cpu / machine_cpu * 100, 1)
 
     task_memory_mb = 0
-    if "usage" in stats["memory_stats"]:  # absent si la tache est deja terminee
-        task_memory_mb = stats["memory_stats"]["usage"] // (1024 * 1024)  # convertit en Mo
+    if "usage" in stats["memory_stats"]:  # missing if the task has already finished
+        task_memory_mb = stats["memory_stats"]["usage"] // (1024 * 1024)  # converts to MB
 
     return task_cpu_percent, task_memory_mb
 
 
-# Premier appel pour démarrer la mesure, sa valeur n'a pas de sens
+# First call to start the measurement, its value is meaningless
 psutil.cpu_percent(interval=None)
 last_measure = time.monotonic()
-last_core_response = time.monotonic()  # derniere fois que core a repondu
+last_core_response = time.monotonic()  # last time core responded
 
 
 
 while True:
     time.sleep(INTERVAL)
     now = time.monotonic()
-    order: Order = send_heartbeat(get_instance_data(now - last_measure)) # c'est ici que on envoie, et recoit l'ordre de core
+    order: Order = send_heartbeat(get_instance_data(now - last_measure)) # this is where we send the heartbeat and receive core's order
     last_measure = now
 
     if order is not None:
         last_core_response = now
     elif now - last_core_response > CORE_TIMEOUT and worker.limits is not None:
-        # core injoignable depuis trop longtemps : plus personne ne surveille la machine, on arrete la tache par securite
-        # elle reprendra quand core repondra start
+        # core unreachable for too long: nobody is watching the machine anymore, stop the task to be safe
+        # it will resume when core replies start
         print(f"Core injoignable depuis plus de {CORE_TIMEOUT:.0f} s : arrêt de la tâche par sécurité", flush=True)
         order = Order(action="stop")
 
@@ -137,5 +137,5 @@ while True:
                 worker.stop()
 
         except docker.errors.DockerException as e:
-            # docker indisponible : on continue, l'ordre sera renvoye au prochain heartbeat
+            # docker unavailable: keep going, the order will be sent again on the next heartbeat
             print(f"Échec de l'ordre {order.action} : {e}", flush=True)

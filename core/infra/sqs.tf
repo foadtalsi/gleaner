@@ -1,9 +1,9 @@
 resource "aws_sqs_queue" "task_queue" {
   name = "task_queue"
 
-  # si l'unite n'est pas supprimee avant ce delai, elle revient dans la file
+  # if the unit isn't deleted before this delay, it comes back to the queue
   visibility_timeout_seconds = var.visibility_timeout_seconds
-  # long polling : le worker attend jusqu'a 20 s qu'un message arrive au lieu de boucler a vide
+  # long polling: the worker waits up to 20 s for a message instead of looping empty
   receive_wait_time_seconds = 20
 
   redrive_policy = jsonencode({
@@ -13,13 +13,13 @@ resource "aws_sqs_queue" "task_queue" {
 }
 
 
-resource "aws_sqs_queue" "dlq_task_queue" { # queue pour les taches qui ont echouer plein de fois
+resource "aws_sqs_queue" "dlq_task_queue" { # queue for tasks that failed many times
   name = "dlq_task_queue"
 
-  message_retention_seconds = 1209600 # 14 jours (le max), pour avoir le temps d'analyser les echecs
+  message_retention_seconds = 1209600 # 14 days (the max), to have time to analyze the failures
 }
 
-# seule task_queue a le droit d'envoyer ses messages dans la DLQ
+# only task_queue is allowed to send its messages to the DLQ
 resource "aws_sqs_queue_redrive_allow_policy" "dlq_task_queue" {
   queue_url = aws_sqs_queue.dlq_task_queue.id
 

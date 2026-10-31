@@ -1,5 +1,5 @@
-# Registre public de l'image de l'agent : les EC2 des clients la telechargent avec docker pull
-# dossier separe de core/infra pour que le destroy des tests ne supprime pas le registre et l'image
+# Public registry for the agent image: the clients' EC2s download it with docker pull
+# separate folder from core/infra so that destroying the tests doesn't delete the registry and the image
 
 terraform {
   required_providers {
@@ -13,7 +13,7 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-east-1" # ECR Public n'existe qu'en us-east-1
+  region = "us-east-1" # ECR Public only exists in us-east-1
 }
 
 resource "aws_ecrpublic_repository" "agent" {

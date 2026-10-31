@@ -1,5 +1,5 @@
-# EC2 de test qui joue la machine d'un client : l'agent gleaner tourne dessus
-# core tourne sur le mac, joignable par un tunnel cloudflared (variable core_url)
+# test EC2 that plays a client's machine: the gleaner agent runs on it
+# core runs on the mac, reachable through a cloudflared tunnel (variable core_url)
 
 variable "core_url" {
   description = "Adresse publique de core (tunnel cloudflared vers le mac), ex : https://xxx.trycloudflare.com"
@@ -18,7 +18,7 @@ variable "task_image" {
   default     = "amazon/aws-cli"
 }
 
-# tache de test : copie entree.txt vers sortie.txt dans le bucket de test, avec le role gleaner-task-exemple
+# test task: copies entree.txt to sortie.txt in the test bucket, with the gleaner-task-exemple role
 locals {
   task_command = "s3 cp s3://${aws_s3_bucket.task_test.bucket}/entree.txt s3://${aws_s3_bucket.task_test.bucket}/sortie.txt"
 }
@@ -28,7 +28,7 @@ data "aws_ssm_parameter" "amazon_linux" {
 }
 
 
-# role de l'ec2 : seulement lire et supprimer les messages de la file
+# the ec2's role: only read and delete messages from the queue
 resource "aws_iam_role" "agent_ec2" {
   name = "gleaner-agent-ec2"
 
@@ -62,7 +62,7 @@ resource "aws_iam_instance_profile" "agent_ec2" {
 }
 
 
-# aucun port ouvert en entree : l'agent ne fait que des connexions sortantes (core, SQS, docker hub)
+# no inbound port open: the agent only makes outbound connections (core, SQS, docker hub)
 resource "aws_security_group" "agent_ec2" {
   name        = "gleaner-agent-ec2"
   description = "Agent gleaner : aucune entree, sorties autorisees"
@@ -82,13 +82,13 @@ resource "aws_instance" "agent" {
   iam_instance_profile   = aws_iam_instance_profile.agent_ec2.name
   vpc_security_group_ids = [aws_security_group.agent_ec2.id]
 
-  # hop limit a 1 : seul l'agent (en --network host) atteint les metadonnees, pas les conteneurs des taches
+  # hop limit of 1: only the agent (in --network host) reaches the metadata, not the task containers
   metadata_options {
     http_tokens                 = "required"
     http_put_response_hop_limit = 1
   }
 
-  # au demarrage : installe docker, telecharge l'image publique de l'agent et la lance
+  # at boot: installs docker, downloads the agent's public image and runs it
   user_data_replace_on_change = true
   user_data                   = <<-EOT
     #!/bin/bash

@@ -1,6 +1,6 @@
-# EC2 qui heberge core, joignable en HTTPS sur api.talsi.dev
-# Caddy recoit le HTTPS (certificat Let's Encrypt automatique) et transmet a core sur 127.0.0.1:8000
-# dossier separe de core/infra pour que le destroy des tests ne supprime pas core
+# EC2 hosting core, reachable over HTTPS at api.talsi.dev
+# Caddy receives the HTTPS (automatic Let's Encrypt certificate) and forwards to core on 127.0.0.1:8000
+# separate folder from core/infra so that destroying the tests doesn't delete core
 
 terraform {
   required_providers {
@@ -23,7 +23,7 @@ variable "domain" {
   default     = "api.talsi.dev"
 }
 
-# Elastic IP creee a la main, deja utilisee par le DNS : Terraform la reutilise sans la gerer
+# Elastic IP created by hand, already used by the DNS: Terraform reuses it without managing it
 data "aws_eip" "core" {
   public_ip = "54.243.111.171"
 }
@@ -33,7 +33,7 @@ data "aws_ssm_parameter" "amazon_linux" {
 }
 
 
-# seulement 80 (Let's Encrypt) et 443 (HTTPS des agents) : le port 8000 de core reste ferme
+# only 80 (Let's Encrypt) and 443 (HTTPS from the agents): core's port 8000 stays closed
 resource "aws_security_group" "core" {
   name        = "gleaner-core"
   description = "Core gleaner : HTTP et HTTPS pour Caddy"
@@ -70,8 +70,8 @@ resource "aws_instance" "core" {
     http_tokens = "required"
   }
 
-  # au demarrage : installe docker, copie le code de core, construit son image, lance core puis Caddy
-  # le script est ecrit en colonne 0 : bash exige le #!/bin/bash et les GLEANER_EOF en debut de ligne
+  # at boot: installs docker, copies core's code, builds its image, starts core then Caddy
+  # the script is written at column 0: bash requires #!/bin/bash and the GLEANER_EOF at the start of the line
   user_data_replace_on_change = true
   user_data                   = <<EOT
 #!/bin/bash

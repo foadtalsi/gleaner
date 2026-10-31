@@ -1,11 +1,11 @@
-# Calcule le compute gaspille par instance ec2, et son cout
+# Computes the compute wasted per ec2 instance, and its cost
 
-waste_data = {}  # vcpu-heures gaspillees par instance
-prices = {}      # prix d'un vcpu-heure par instance, a remplir a la main, plus tard avec l'api aws des prices
+waste_data = {}  # wasted vcpu-hours per instance
+prices = {}      # price of a vcpu-hour per instance, filled in by hand, later with the aws pricing api
 
 
 def record_waste(instance_id, cpu_free_percent, vcpus, period_seconds):
-    # tout le CPU libre compte comme gaspille
+    # all free CPU counts as wasted
     wasted_hours = cpu_free_percent / 100 * vcpus * period_seconds / 3600
 
     if instance_id not in waste_data:

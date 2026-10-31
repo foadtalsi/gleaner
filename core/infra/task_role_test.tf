@@ -1,15 +1,15 @@
-# Test du role par tache : un bucket de test, et le role gleaner-task-exemple qui n'a acces qu'a ce bucket
-# core envoie l'arn de ce role dans l'Order (voir task_iam_roles dans core/ec2/scheduler.py)
+# Test of the per-task role: a test bucket, and the gleaner-task-exemple role which only has access to this bucket
+# core sends this role's arn in the Order (see task_iam_roles in core/ec2/scheduler.py)
 
 data "aws_caller_identity" "current" {}
 
 resource "aws_s3_bucket" "task_test" {
   bucket        = "gleaner-task-test-${data.aws_caller_identity.current.account_id}"
-  force_destroy = true # destroy supprime aussi les fichiers du test
+  force_destroy = true # destroy also deletes the test files
 }
 
 
-# le role de la tache : seul le role de l'ec2 de l'agent peut l'emprunter
+# the task's role: only the agent ec2's role can assume it
 resource "aws_iam_role" "task_exemple" {
   name = "gleaner-task-exemple"
 
@@ -45,7 +45,7 @@ resource "aws_iam_role_policy" "task_exemple_s3" {
 }
 
 
-# le role de l'ec2 peut emprunter ce role, et rien de plus
+# the ec2's role can assume this role, and nothing more
 resource "aws_iam_role_policy" "agent_ec2_assume_task" {
   name = "gleaner-agent-assume-task"
   role = aws_iam_role.agent_ec2.id

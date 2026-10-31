@@ -1,4 +1,4 @@
-# appels a l'API de Meta : decoupage des taches et choix du role IAM
+# calls to Meta's API: task splitting and IAM role choice
 import json
 import os
 from pydantic import BaseModel
@@ -9,8 +9,8 @@ from users import task_possible_roles, users
 sqs = boto3.client("sqs")
 s3 = boto3.client("s3")
 
-LOT_SIZE = 20  # fichiers par message SQS, plus tard choisi par le LLM
-MAX_OUTPUT_TOKENS = 16000  # la reflexion du modele compte dedans : trop bas, il ne reste plus rien pour la reponse
+LOT_SIZE = 20  # files per SQS message, later chosen by the LLM
+MAX_OUTPUT_TOKENS = 16000  # the model's reasoning counts toward it: too low, nothing is left for the answer
 
 
 def ask_llm(prompt):
@@ -20,7 +20,7 @@ def ask_llm(prompt):
         json={"model": "muse-spark-1.3", "input": prompt, "max_output_tokens": MAX_OUTPUT_TOKENS},
     )
     response.raise_for_status()
-    return response.json()["output"][-1]["content"][0]["text"]  # output[0] est la reflexion du modele, le message est le dernier
+    return response.json()["output"][-1]["content"][0]["text"]  # output[0] is the model's reasoning, the message is the last one
 
 
 def create_task_code(task):
@@ -38,10 +38,10 @@ def choose_task_iam_role(task):
 
     task_role = ask_llm(prompt).strip()
 
-    if task_role not in users[task.user_name]["allowed_roles"]: # regarde si le role choisi par le LLM est bien dans la liste des roles que la personne peut donner a ses taches
+    if task_role not in users[task.user_name]["allowed_roles"]: # checks that the role chosen by the LLM is in the list of roles the person can give to their tasks
         raise ValueError(f"Role non autorise : {task_role}")
 
-    if task_role not in task_possible_roles: # regarde si le role choisi par le LLM est bien dans la liste des roles possibles
+    if task_role not in task_possible_roles: # checks that the role chosen by the LLM is in the list of possible roles
         raise ValueError(f"Role inconnu : {task_role}")
 
 
@@ -54,12 +54,12 @@ def choose_task_iam_role(task):
 
 
 def send_task_to_sqs(task, task_code, task_iam_role):
-    # liste les fichiers des ressources s3://, les coupe en lots, et envoie un message SQS par lot avec le code
+    # lists the files of the s3:// resources, splits them into batches, and sends one SQS message per batch with the code
     files = []
     for resource in task.resources:
         if resource.startswith("s3://"):
-            bucket, _, prefix = resource[len("s3://"):].partition("/")  # "s3://bucket/dossier/" -> "bucket", "dossier/"
-            response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)  # 1000 fichiers au plus
+            bucket, _, prefix = resource[len("s3://"):].partition("/")  # "s3://bucket/folder/" -> "bucket", "folder/"
+            response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix)  # 1000 files at most
             for s3_object in response.get("Contents", []):
                 files.append(f"s3://{bucket}/{s3_object['Key']}")
 
@@ -67,10 +67,10 @@ def send_task_to_sqs(task, task_code, task_iam_role):
     for start in range(0, len(files), LOT_SIZE):
         lots.append(files[start:start + LOT_SIZE])
     if len(lots) == 0:
-        lots.append([])  # tache sans fichiers : un seul message, le code fait toute la tache
+        lots.append([])  # task without files: a single message, the code does the whole task
 
     for lot in lots:
-        message = {"resources": task.resources, "keys": lot, "code": task_code, "iam_role": task_possible_roles[task_iam_role]["arn"]}  # l'ARN : c'est ce que le worker donne a assume_role
+        message = {"resources": task.resources, "keys": lot, "code": task_code, "iam_role": task_possible_roles[task_iam_role]["arn"]}  # the ARN: it's what the worker gives to assume_role
         sqs.send_message(QueueUrl=os.environ["QUEUE_URL"], MessageBody=json.dumps(message))
 
     return len(lots)

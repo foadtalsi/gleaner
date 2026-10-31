@@ -1,34 +1,34 @@
-# Image de l'agent gleaner
+# gleaner agent image
 #
-# Construire :
+# Build:
 #   docker build -t gleaner-agent agent/ec2
 #
-# Lancer :
+# Run:
 #   docker run -d --name gleaner-agent --restart unless-stopped \
 #     -v /var/run/docker.sock:/var/run/docker.sock \
 #     -e CORE_URL=http://host.docker.internal:8000 \
 #     -e INSTANCE_ID=local-dev \
-#     -e QUEUE_URL=<url de la file SQS> \
-#     -e TASK_IMAGE=<image de l'ingenieur> \
-#     -e TASK_COMMAND="<commande>" \
+#     -e QUEUE_URL=<SQS queue url> \
+#     -e TASK_IMAGE=<engineer's image> \
+#     -e TASK_COMMAND="<command>" \
 #     -e AWS_DEFAULT_REGION=us-east-1 \
 #     gleaner-agent
 #
-# Le socket Docker est monte pour que le worker puisse lancer et tuer les conteneurs de l'ingenieur.
-# Attention : il donne a l'agent un acces equivalent a root sur la machine.
-# Sur Mac, host.docker.internal pointe vers la machine qui fait tourner Docker ; sur une EC2, mettre la vraie URL de core.
+# The Docker socket is mounted so the worker can start and kill the engineer's containers.
+# Warning: it gives the agent root-equivalent access to the machine.
+# On Mac, host.docker.internal points to the machine running Docker; on an EC2, set the real core URL.
 
 FROM python:3.12-slim
 
 WORKDIR /app
 
-# dependances d'abord, pour ne pas les reinstaller a chaque modif du code
+# dependencies first, so they aren't reinstalled on every code change
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY agent.py worker.py ./
 
-# valeurs par defaut, a surcharger au lancement avec -e
+# default values, to override at launch with -e
 ENV CORE_URL=http://localhost:8000 \
     INSTANCE_ID=local-dev \
     INTERVAL=5

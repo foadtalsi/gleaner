@@ -1,2 +1,2 @@
-# Donnees de chaque instance ec2, remplies par l'api a chaque heartbeat
-instance_data = {} # sert a stocker les donnees de chaque instance ec2, ex : cpu, vcpus, period_seconds
+# Data of each ec2 instance, filled by the api on each heartbeat
+instance_data = {} # stores the data of each ec2 instance, e.g. cpu, vcpus, period_seconds
