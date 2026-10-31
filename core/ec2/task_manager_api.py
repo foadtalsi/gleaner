@@ -1,6 +1,7 @@
 # core API: receives heartbeats from agents and replies with the order to execute
 # full walkthrough: docs/architecture.md
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from llm import choose_task_iam_role, create_task_code, send_task_to_sqs
@@ -105,7 +106,40 @@ def create_task(task: Task):
 
 @app.get("/tasks") # returns the list of tasks received from the web interface
 def get_tasks():
-    return {"tasks": tasks}
+    # the author's key is left out: anyone reading it could create or validate tasks in their name
+    tasks_without_keys = []
+    for saved_task in tasks:
+        tasks_without_keys.append({
+            "task_id": saved_task["task"].task_id,
+            "description": saved_task["task"].description,
+            "input_resources": saved_task["task"].input_resources,
+            "output_resources": saved_task["task"].output_resources,
+            "user_name": saved_task["task"].user_name,
+            "code": saved_task["code"],
+            "role": saved_task["role"],
+            "status": saved_task["status"],
+        })
+    return {"tasks": tasks_without_keys}
+
+
+@app.get("/", response_class=HTMLResponse) # the web interface, a single page
+def get_web_interface():
+    with open("index.html") as file:
+        return file.read()
+
+
+@app.get("/users") # people and the roles they can give to their tasks, without their keys, for the admin page
+def get_users():
+    users_without_keys = {}
+    for name, user in users.items():
+        users_without_keys[name] = {"is_admin": user["is_admin"], "allowed_roles": user["allowed_roles"]}
+    return {"users": users_without_keys}
+
+
+@app.get("/roles") # the client's closed list of roles, with the services each one gives access to
+def get_roles():
+    return {"roles": task_possible_roles}
+
 
 @app.put("/users/{name}/allowed_roles") # an admin changes the IAM roles that the person "name" is allowed to give to their tasks
 def set_allowed_roles(name: str, admin_request: AllowedRolesUpdate):

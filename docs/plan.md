@@ -154,9 +154,9 @@ Démo : **redimensionnement d'images**.
 - **Une image gleaner générique** (Python + `boto3` + `Pillow`) exécute le code généré. Le code ne peut utiliser que ces bibliothèques.
 - **Le code ne traite qu'une unité** : il la lit dans la variable `GLEANER_TASK`, et ne liste pas lui-même tout le bucket.
 - **L'humain valide aussi le code** avant le lancement : il tourne sur la machine du client. Le rôle IAM limite les dégâts si le code est mauvais ou si la description était piégée.
-- **Le code arrive au worker dans chaque message SQS** : `{"resources": [...], "keys": [...], "code": ...}`, environ 6 Ko par message (limite SQS : 256 Ko).
-- **L'ingénieur donne la liste des ressources** de la tâche (`resources`, ex : `s3://bucket/photos/`). Core découpe les fichiers de ces ressources, et le worker limitera le rôle IAM à ces ressources (paramètre `Policy` de `sts.assume_role`) : même un code malveillant ne pourra toucher que ce que l'ingénieur a déclaré.
-- **À trancher le 30 :** distinguer les ressources **à lire** (découpées) de celles **où écrire** (ex : `resized/`). Sinon, soit l'écriture est refusée par le rôle limité, soit core découpe aussi les résultats.
+- **Le code arrive au worker dans chaque message SQS** : `{"input_resources": [...], "output_resources": [...], "keys": [...], "code": ..., "iam_role": ...}`, environ 6 Ko par message (limite SQS : 256 Ko). Le worker le lance avec `python -c` dans l'image générique (`TASK_IMAGE`).
+- **Décidé le 2026-10-31 : l'ingénieur donne deux listes de ressources.** `input_resources` (ex : `s3://bucket/photos/`) : lues seulement, et découpées en lots par core. `output_resources` (ex : `s3://bucket/resized/`) : où le code écrit ses résultats, jamais découpées. Avec une seule liste, soit l'écriture était refusée, soit core découpait aussi les résultats et le code pouvait écraser les originaux.
+- **Le worker limite le rôle à ces ressources** avec une Policy de session (paramètre `Policy` de `sts.assume_role`) : `s3:GetObject` sur les entrées, `s3:PutObject` sur les sorties, rien d'autre. Même un code malveillant ne peut ni écraser les originaux, ni lire ailleurs. Vérifié avec le simulateur IAM (`aws iam simulate-custom-policy`).
 
 ### Le moindre privilège sur les tâches
 
@@ -172,7 +172,7 @@ exécution    → rôle limité aux ressources déclarées, identifiants de 15 m
 - **Des personnes et des rôles dans le produit** : chaque personne a une clé et une liste de **rôles IAM autorisés**, pris dans la liste fermée du client. Gardé en mémoire (`users`), écrit en dur pour la démo (un admin, deux ingénieurs). Cette clé remplace le `client_key` provisoire.
 - **L'admin modifie les rôles autorisés** de chaque personne (route réservée aux admins, puis page de l'interface). La limite porte sur des **rôles IAM**, pas sur des services AWS : c'est le rôle qui donne réellement les droits. L'interface affiche les services de chaque rôle.
 - **Le LLM ne voit que les rôles autorisés de l'auteur de la tâche**, et core refuse un rôle hors de cette liste.
-- **Revue obligatoire par une autre personne que l'auteur** (règle des « 4 yeux ») : `POST /task` garde la tâche avec l'état `"a_valider"` sans rien envoyer dans SQS. Seule la route `POST /task/{task_id}/validate` appelle `send_task_to_sqs`. Le relecteur voit le code et le rôle, et peut changer le rôle pour un autre rôle autorisé.
+- **Revue obligatoire par une autre personne que l'auteur** (règle des « 4 yeux ») : `POST /task` garde la tâche avec l'état `"a_valider"` sans rien envoyer dans SQS. Seule la route `POST /tasks/{task_id}/validate` appelle `send_task_to_sqs`, puis passe la tâche en `"validee"` pour qu'elle ne parte pas deux fois. Le relecteur voit le code et le rôle, et peut changer le rôle pour un autre rôle autorisé (changement de rôle pas encore fait).
 
 ### Simplifications pour tenir les délais
 
@@ -183,7 +183,7 @@ exécution    → rôle limité aux ressources déclarées, identifiants de 15 m
 - **Tout reste en mémoire** : ni DynamoDB ni ECS pendant le hackathon.
 - **L'interface est une simple page HTML** servie par FastAPI.
 - **C'est l'interface web qui crée la tâche** : elle envoie à core (`POST /task`) l'identifiant de la tâche, sa description et la clé du client. Core ne fabrique pas l'identifiant, il garde celui qu'il reçoit. Pour le moment, core vérifie cette clé dans la liste des clés d'agent (`AGENTS_KEY_DIR`) ; une vraie liste de clés client viendra plus tard.
-- **Appels au LLM de Meta (`muse-spark-1.3`, API `api.meta.ai`) avec `requests`**. La clé est dans `core/ec2/.env`, ignoré par git, et chargée en variable d'environnement.
+- **Appels au LLM de Meta (`muse-spark-1.3`, API `api.meta.ai`) avec `requests`**. La clé est dans `core/ec2/.env`, ignoré par git, et chargée en variable d'environnement. Chaque appel est limité à 16 000 tokens de sortie (`MAX_OUTPUT_TOKENS`) : la réflexion du modèle compte dedans, et à 4 000 il ne restait rien pour le code.
 
 ### Planning
 
@@ -192,10 +192,10 @@ exécution    → rôle limité aux ressources déclarées, identifiants de 15 m
 | Mar. 27 | Premier appel au LLM depuis core (`core/ec2/llm.py`, modèle `muse-spark-1.3` sur `api.meta.ai`). Clés client (fait par Foad). | ✅ appel testé |
 | Mer. 28 | Notion de **tâche** dans core (`POST /task`, champ `resources` donné par l'ingénieur). **Génération du code par le LLM** (`create_task_code`). Découpage en lots de 20 et envoi dans SQS (`send_task_to_sqs`, le code voyage dans chaque message). | ✅ testé le 27 (45 photos → 3 messages) |
 | Jeu. 29 | **Personnes et rôles autorisés** (`users` en mémoire, route admin `PUT /users/{name}/allowed_roles`). **Choix du rôle par le LLM** parmi les rôles autorisés de l'auteur, vérifié par core. `POST /task` garde la tâche avec le code, le rôle et l'état `"a_valider"`, sans rien envoyer dans SQS. Le rôle (son ARN) voyage dans chaque message SQS. | ✅ testé le 28 |
-| Ven. 30 | **Revue obligatoire** par une autre personne (`POST /task/{task_id}/validate`), seule à envoyer dans SQS. Le worker exécute le code généré dans l'image générique, avec le rôle limité aux ressources. | ⬜ |
+| Ven. 30 | **Revue obligatoire** par une autre personne (`POST /tasks/{task_id}/validate`), seule à envoyer dans SQS. Ressources à lire et à écrire séparées. Le worker exécute le code généré dans l'image générique, avec le rôle limité aux ressources. | ✅ revue testée de bout en bout le 29 (25 fichiers → 2 messages), Policy vérifiée avec le simulateur IAM, exécution testée en local. `assume_role` à tester avec les vrais rôles du 1er |
 | Sam. 31 | **Interface web** : formulaire, écran de revue (code, rôle, découpage), page admin, suivi. | ⬜ |
 | Dim. 1 | **Image gleaner générique** (Python + boto3 + Pillow, publiée sur ECR Public) et 2 ou 3 rôles de démo en Terraform. | ⬜ |
-| Lun. 2 | **Déploiement** : core sur `api.talsi.dev`, 2 EC2 avec l'agent, un bucket de photos. Test de bout en bout. | ⬜ |
+| Lun. 2 | **Déploiement** : core sur `api.talsi.dev`, 2 EC2 avec l'agent, un bucket de photos. Test de bout en bout. À corriger avant : `core/hosting/main.tf` ne copie pas `llm.py`, `users.py` ni `agent_key.py`, le Dockerfile de core n'installe ni `boto3` ni `requests`, et ni `meta_api_key` ni `QUEUE_URL` ne sont passés à core. | ⬜ |
 | Mar. 3 | **Démo solide** et enregistrée : vidéo, README, pitch. | ⬜ |
 | Mer. 4 | **Soumission**, et marge si quelque chose a glissé. | ⬜ |
 

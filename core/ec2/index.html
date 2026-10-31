@@ -1,0 +1,681 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gleaner</title>
+<style>
+  :root {
+    --cosmic: #23212C;
+    --raised: #2B2934;
+    --code: #1C1B23;
+    --line: #36343F;
+    --text: #DCDBE0;
+    --strong: #F4F3F6;
+    --muted: #8F8D98;
+    --button-text: #23212C;
+    --amber: #D8B271;
+    --green: #8FBF9F;
+    --red: #E2897F;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  body {
+    margin: 0;
+    background: var(--cosmic);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container { max-width: 960px; margin: 0 auto; padding: 0 16px; }
+  h1, h2, h3, p { margin: 0; }
+  h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; color: var(--strong); }
+  h3 { font-size: 17px; font-weight: 700; color: var(--strong); }
+  code, .mono { font-family: var(--mono); font-size: 13px; }
+  .muted { color: var(--muted); }
+  .amber { color: var(--amber); }
+  .green { color: var(--green); }
+  .red { color: var(--red); }
+
+  /* buttons and fields */
+  button { font: inherit; cursor: pointer; }
+  .button {
+    border: 0; border-radius: 6px; padding: 10px 18px;
+    background: var(--text); color: var(--button-text); font-weight: 700;
+  }
+  .button:hover { background: var(--strong); }
+  .button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .link-button { border: 0; background: none; padding: 0; color: var(--muted); font-weight: 600; }
+  .link-button:hover { color: var(--strong); }
+  .button:focus-visible, .link-button:focus-visible, .tab:focus-visible, input:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--text); outline-offset: 2px;
+  }
+
+  label { display: block; font-weight: 700; font-size: 14px; color: var(--strong); margin-bottom: 6px; }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  input[type="text"], input[type="password"], textarea {
+    width: 100%; padding: 10px 12px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--raised); color: var(--strong); font: inherit;
+  }
+  input::placeholder, textarea::placeholder { color: #66646F; }
+  textarea { resize: vertical; min-height: 88px; }
+  textarea.mono { min-height: 60px; }
+  input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--text); cursor: pointer; }
+  .field { margin-bottom: 20px; }
+  .two-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .message { margin-top: 14px; font-size: 14px; font-weight: 600; }
+
+  /* "label  value" rows, like a spec sheet */
+  .spec { display: grid; grid-template-columns: 130px 1fr; column-gap: 24px; row-gap: 10px; }
+  .spec dt { font-weight: 700; color: var(--strong); }
+  .spec dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .spec-wide { grid-template-columns: 200px 1fr; }
+
+  /* header and tabs */
+  header { border-bottom: 1px solid var(--line); }
+  .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 60px; }
+  .wordmark { font-size: 21px; font-weight: 800; letter-spacing: -0.03em; color: var(--strong); }
+  .session { display: flex; align-items: center; gap: 16px; font-size: 14px; }
+  .tabs { display: flex; gap: 28px; overflow-x: auto; }
+  .tab {
+    border: 0; background: none; padding: 16px 0 13px; border-bottom: 2px solid transparent;
+    color: var(--muted); font-weight: 700; font-size: 14px; white-space: nowrap;
+  }
+  .tab:hover { color: var(--text); }
+  .tab[aria-selected="true"] { color: var(--strong); border-bottom-color: var(--strong); }
+  .tab-count { color: var(--amber); margin-left: 4px; }
+
+  /* sign in */
+  .sign-in { max-width: 400px; margin: 0 auto; padding: 14vh 16px 64px; }
+  .sign-in-title { font-size: 64px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; color: var(--text); }
+  .sign-in-tagline { color: var(--muted); margin: 14px 0 40px; }
+  .sign-in .button { width: 100%; }
+  .sign-in-rules { margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 14px; }
+  .sign-in-rules .spec { grid-template-columns: 70px 1fr; }
+
+  /* panels */
+  .panel { padding: 36px 0 80px; }
+  .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
+  .narrow { max-width: 720px; }
+
+  /* tasks */
+  .task { padding: 28px 0; border-top: 1px solid var(--line); }
+  .task:first-child { border-top: 0; padding-top: 0; }
+  .task-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 4px; }
+  .task-status { font-size: 14px; font-weight: 700; white-space: nowrap; }
+  .task-meta { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+  .task .spec { margin-bottom: 20px; }
+  details { margin-bottom: 20px; }
+  summary { cursor: pointer; font-weight: 700; color: var(--strong); margin-bottom: 10px; }
+  pre.code {
+    margin: 0; padding: 16px; max-height: 420px; overflow: auto;
+    background: var(--code); border-radius: 6px;
+    font: 12.5px/1.6 var(--mono); color: #CFCDD6; white-space: pre;
+  }
+
+  /* monitoring */
+  .numbers { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .number { padding: 20px 0; }
+  .number + .number { padding-left: 20px; border-left: 1px solid var(--line); }
+  .number-value { font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--text); }
+  .number-label { color: var(--muted); font-size: 13px; font-weight: 600; margin-top: 4px; }
+  .instance { padding: 22px 0; border-bottom: 1px solid var(--line); }
+  .instance-head { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+  .cpu-bar { display: flex; height: 6px; background: var(--raised); margin-bottom: 14px; }
+  .cpu-client { background: #6C6A75; }
+  .cpu-tasks { background: var(--text); }
+
+  /* admin */
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 12px 16px 12px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { color: var(--muted); font-weight: 700; }
+  .center { text-align: center; }
+  .table-scroll { overflow-x: auto; }
+  .section-title { margin: 40px 0 16px; }
+
+  @media (max-width: 640px) {
+    .two-columns { grid-template-columns: 1fr; gap: 0; }
+    .numbers { grid-template-columns: 1fr 1fr; }
+    .number:nth-child(3) { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
+    .number:nth-child(4) { border-top: 1px solid var(--line); }
+    .spec { grid-template-columns: 96px 1fr; column-gap: 16px; }
+    .spec-wide { grid-template-columns: 1fr; row-gap: 2px; }
+    .spec-wide dd { margin-bottom: 10px; }
+    .sign-in-title { font-size: 52px; }
+    .panel-head { flex-direction: column; gap: 6px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- sign in -->
+<main id="sign-in-view" class="sign-in">
+  <h1 class="sign-in-title">gleaner</h1>
+  <p class="sign-in-tagline">Run tasks on the CPU your EC2s leave idle.</p>
+
+  <form onsubmit="signIn(event)">
+    <div class="field">
+      <label for="sign-in-name">Name</label>
+      <input type="text" id="sign-in-name" autocomplete="username" required>
+    </div>
+    <div class="field">
+      <label for="sign-in-key">Key</label>
+      <input type="password" id="sign-in-key" autocomplete="current-password" required>
+    </div>
+    <button class="button" type="submit">Sign in</button>
+    <p class="hint">Demo: admin, ingenieur_1, ingenieur_2</p>
+    <p class="message red" id="sign-in-message"></p>
+  </form>
+
+  <div class="sign-in-rules">
+    <dl class="spec">
+      <dt>Admin</dt><dd class="muted">limits the roles each person can give</dd>
+      <dt>LLM</dt><dd class="muted">writes the code, picks the smallest role</dd>
+      <dt>Review</dt><dd class="muted">another person approves, always</dd>
+      <dt>Run</dt><dd class="muted">15-minute credentials, declared resources only</dd>
+    </dl>
+  </div>
+</main>
+
+<!-- application -->
+<div id="app-view" hidden>
+  <header>
+    <div class="container header-row">
+      <span class="wordmark">gleaner</span>
+      <div class="session">
+        <span><span class="muted">Signed in as</span> <strong id="session-name"></strong> <span class="muted" id="session-admin" hidden>(admin)</span></span>
+        <button class="link-button" onclick="signOut()">Sign out</button>
+      </div>
+    </div>
+    <nav class="container tabs" role="tablist">
+      <button class="tab" role="tab" id="tab-new-task" onclick="showTab('new-task')">New task</button>
+      <button class="tab" role="tab" id="tab-review" onclick="showTab('review')">Review<span class="tab-count" id="review-count" hidden></span></button>
+      <button class="tab" role="tab" id="tab-monitoring" onclick="showTab('monitoring')">Monitoring</button>
+      <button class="tab" role="tab" id="tab-admin" onclick="showTab('admin')" hidden>Admin</button>
+    </nav>
+  </header>
+
+  <main class="container">
+    <!-- new task -->
+    <section class="panel narrow" id="panel-new-task">
+      <div class="panel-head"><h2>New task</h2></div>
+      <form onsubmit="submitTask(event)">
+        <div class="field">
+          <label for="task-description">What should it do?</label>
+          <textarea id="task-description" required placeholder="Resize the photos of the demo bucket to 800px wide"></textarea>
+        </div>
+        <div class="two-columns">
+          <div class="field">
+            <label for="task-inputs">Reads</label>
+            <textarea id="task-inputs" class="mono" required placeholder="s3://bucket/photos/"></textarea>
+            <p class="hint">One per line. Split into batches, read only.</p>
+          </div>
+          <div class="field">
+            <label for="task-outputs">Writes</label>
+            <textarea id="task-outputs" class="mono" placeholder="s3://bucket/resized/"></textarea>
+            <p class="hint">One per line. Write only. Empty for a read-only task.</p>
+          </div>
+        </div>
+        <button class="button" type="submit" id="new-task-button">Write the code</button>
+        <p class="message" id="new-task-message"></p>
+      </form>
+      <div id="new-task-result" style="margin-top: 36px;"></div>
+    </section>
+
+    <!-- review -->
+    <section class="panel narrow" id="panel-review" hidden>
+      <div class="panel-head">
+        <h2>Review</h2>
+        <button class="link-button" onclick="loadReview()">Refresh</button>
+      </div>
+      <p class="message" id="review-message" style="margin: -12px 0 24px;"></p>
+      <div id="review-list"></div>
+    </section>
+
+    <!-- monitoring -->
+    <section class="panel" id="panel-monitoring" hidden>
+      <div class="panel-head">
+        <h2>Monitoring</h2>
+        <span class="muted" id="monitoring-updated"></span>
+      </div>
+      <div class="numbers" id="monitoring-numbers"></div>
+      <h3 class="section-title">Instances</h3>
+      <div id="monitoring-instances"></div>
+    </section>
+
+    <!-- admin -->
+    <section class="panel narrow" id="panel-admin" hidden>
+      <div class="panel-head"><h2>Roles</h2></div>
+      <p class="muted" style="margin-bottom: 24px;">The closed list of IAM roles. A task only gets one of them, and only if its author may give it.</p>
+      <dl class="spec spec-wide" id="admin-roles"></dl>
+      <h3 class="section-title">Who can give what</h3>
+      <div class="table-scroll" id="admin-users"></div>
+      <p class="message" id="admin-message"></p>
+    </section>
+  </main>
+</div>
+
+<script>
+  // --- State, kept in memory: reloading the page signs out
+  let currentUser = null;      // {name, key, isAdmin}
+  let roles = {};              // the client's closed list of roles, from GET /roles
+  let monitoringTimer = null;  // refreshes the monitoring tab every 5 s while it is open
+
+  const tabNames = ["new-task", "review", "monitoring", "admin"];
+
+
+  // --- Helpers
+
+  // every value coming from core or from a person goes through here before being put in the page
+  function escapeHtml(value) {
+    return String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  // calls a core route and returns {ok, data}; core answers JSON, except when it crashes (plain text)
+  async function callCore(method, path, body) {
+    const options = { method: method, headers: {} };
+    if (body !== undefined) {
+      options.headers["Content-Type"] = "application/json";
+      options.body = JSON.stringify(body);
+    }
+    const response = await fetch(path, options);
+
+    let data;
+    if (response.headers.get("content-type").includes("application/json")) {
+      data = await response.json();
+    } else {
+      data = await response.text();
+    }
+    return { ok: response.ok, data: data };
+  }
+
+  function errorText(data) {
+    if (typeof data === "string") {
+      return data;
+    }
+    if (typeof data.detail === "string") {
+      return data.detail;
+    }
+    return JSON.stringify(data.detail);
+  }
+
+  // color is "red", "green" or "muted"
+  function showMessage(elementId, color, text) {
+    const element = document.getElementById(elementId);
+    element.className = "message " + color;
+    element.textContent = text;
+  }
+
+  // "s3://a/\n\ns3://b/" -> ["s3://a/", "s3://b/"]
+  function linesToList(text) {
+    const list = [];
+    for (const line of text.split("\n")) {
+      if (line.trim() !== "") {
+        list.push(line.trim());
+      }
+    }
+    return list;
+  }
+
+  function resourcesHtml(resources) {
+    if (resources.length === 0) {
+      return `<span class="muted">nothing</span>`;
+    }
+    const lines = [];
+    for (const resource of resources) {
+      lines.push(`<code>${escapeHtml(resource)}</code>`);
+    }
+    return lines.join("<br>");
+  }
+
+
+  // --- Sign in
+
+  async function signIn(event) {
+    event.preventDefault();
+    const name = document.getElementById("sign-in-name").value.trim();
+    const key = document.getElementById("sign-in-key").value.trim();
+
+    // the key is only checked by core when the person acts (create, validate, change roles)
+    const usersResponse = await callCore("GET", "/users");
+    const users = usersResponse.data.users;
+    if (!(name in users)) {
+      showMessage("sign-in-message", "red", "Unknown person: " + name);
+      return;
+    }
+    currentUser = { name: name, key: key, isAdmin: users[name].is_admin };
+
+    const rolesResponse = await callCore("GET", "/roles");
+    roles = rolesResponse.data.roles;
+
+    document.getElementById("session-name").textContent = name;
+    document.getElementById("session-admin").hidden = !currentUser.isAdmin;
+    document.getElementById("tab-admin").hidden = !currentUser.isAdmin;
+    document.getElementById("sign-in-message").textContent = "";
+    document.getElementById("sign-in-view").hidden = true;
+    document.getElementById("app-view").hidden = false;
+    showTab("new-task");
+    loadReview();  // fills the number of tasks awaiting review
+  }
+
+  function signOut() {
+    currentUser = null;
+    clearInterval(monitoringTimer);
+    document.getElementById("sign-in-key").value = "";
+    document.getElementById("new-task-result").innerHTML = "";
+    document.getElementById("new-task-message").textContent = "";
+    document.getElementById("app-view").hidden = true;
+    document.getElementById("sign-in-view").hidden = false;
+  }
+
+  function showTab(tabName) {
+    for (const name of tabNames) {
+      document.getElementById("panel-" + name).hidden = name !== tabName;
+      document.getElementById("tab-" + name).setAttribute("aria-selected", name === tabName);
+    }
+
+    clearInterval(monitoringTimer);
+    if (tabName === "review") {
+      loadReview();
+    }
+    if (tabName === "monitoring") {
+      loadMonitoring();
+      monitoringTimer = setInterval(loadMonitoring, 5000);
+    }
+    if (tabName === "admin") {
+      loadAdmin();
+    }
+  }
+
+
+  // --- New task
+
+  async function submitTask(event) {
+    event.preventDefault();
+    const button = document.getElementById("new-task-button");
+    const task = {
+      task_id: "task-" + Date.now().toString(36),
+      description: document.getElementById("task-description").value.trim(),
+      input_resources: linesToList(document.getElementById("task-inputs").value),
+      output_resources: linesToList(document.getElementById("task-outputs").value),
+      user_name: currentUser.name,
+      user_key: currentUser.key,
+    };
+
+    button.disabled = true;
+    button.textContent = "Writing the code…";
+    document.getElementById("new-task-result").innerHTML = "";
+    showMessage("new-task-message", "muted", "The LLM picks the smallest role and writes the code. This can take a minute.");
+
+    const response = await callCore("POST", "/task", task);
+
+    button.disabled = false;
+    button.textContent = "Write the code";
+    if (!response.ok) {
+      showMessage("new-task-message", "red", errorText(response.data));
+      return;
+    }
+
+    showMessage("new-task-message", "green", "Created. Nothing runs until another person approves it.");
+    const createdTask = {
+      task_id: response.data.task_id,
+      description: task.description,
+      input_resources: task.input_resources,
+      output_resources: task.output_resources,
+      user_name: task.user_name,
+      code: response.data.code,
+      role: response.data.role,
+      status: response.data.status,
+    };
+    document.getElementById("new-task-result").innerHTML = taskHtml(createdTask);
+    loadReview();
+  }
+
+
+  // --- Review
+
+  function taskHtml(task) {
+    let roleServices = "";
+    if (task.role in roles) {
+      roleServices = roles[task.role].services;
+    }
+
+    // the code of an approved task is folded, so the tasks still to review stand out
+    let status = `<span class="task-status green">Approved, in the queue</span>`;
+    let codeOpen = "";
+    if (task.status === "a_valider") {
+      status = `<span class="task-status amber">Awaiting review</span>`;
+      codeOpen = "open";
+    }
+
+    let action;
+    if (task.status !== "a_valider") {
+      action = `<p class="muted">Agents run its batches on idle CPU.</p>`;
+    } else if (task.user_name === currentUser.name) {
+      action = `<p class="muted">You wrote it, so another person has to approve it.</p>`;
+    } else {
+      action = `<button class="button" data-task-id="${escapeHtml(task.task_id)}" onclick="approveTask(this)">Approve and run</button>`;
+    }
+
+    const codeLines = task.code.split("\n").length;
+
+    return `
+      <article class="task">
+        <div class="task-head">
+          <h3>${escapeHtml(task.description)}</h3>
+          ${status}
+        </div>
+        <p class="task-meta">${escapeHtml(task.task_id)}, by ${escapeHtml(task.user_name)}</p>
+        <dl class="spec">
+          <dt>Role</dt>
+          <dd><code>${escapeHtml(task.role)}</code> <span class="muted">${escapeHtml(roleServices)}</span></dd>
+          <dt>Reads</dt>
+          <dd>${resourcesHtml(task.input_resources)}</dd>
+          <dt>Writes</dt>
+          <dd>${resourcesHtml(task.output_resources)}</dd>
+          <dt>Credentials</dt>
+          <dd class="muted">15 minutes, limited to the resources above</dd>
+        </dl>
+        <details ${codeOpen}>
+          <summary>Code, ${codeLines} lines</summary>
+          <pre class="code">${escapeHtml(task.code)}</pre>
+        </details>
+        ${action}
+      </article>`;
+  }
+
+  async function loadReview() {
+    const response = await callCore("GET", "/tasks");
+    const tasks = response.data.tasks.slice().reverse();  // newest first
+
+    let awaitingCount = 0;
+    for (const task of tasks) {
+      if (task.status === "a_valider") {
+        awaitingCount += 1;
+      }
+    }
+    const count = document.getElementById("review-count");
+    count.textContent = awaitingCount;
+    count.hidden = awaitingCount === 0;
+
+    const list = document.getElementById("review-list");
+    if (tasks.length === 0) {
+      list.innerHTML = `<p class="muted">No task yet.</p>`;
+      return;
+    }
+    const items = [];
+    for (const task of tasks) {
+      items.push(taskHtml(task));
+    }
+    list.innerHTML = items.join("");
+  }
+
+  async function approveTask(button) {
+    const taskId = button.dataset.taskId;
+    button.disabled = true;
+    button.textContent = "Sending to the queue…";
+
+    const response = await callCore("POST", "/tasks/" + encodeURIComponent(taskId) + "/validate", {
+      validator_name: currentUser.name,
+      validator_key: currentUser.key,
+    });
+
+    if (!response.ok) {
+      button.disabled = false;
+      button.textContent = "Approve and run";
+      showMessage("review-message", "red", errorText(response.data));
+      return;
+    }
+    showMessage("review-message", "green", taskId + " approved and sent to the queue.");
+    loadReview();
+  }
+
+
+  // --- Monitoring
+
+  async function loadMonitoring() {
+    const tasksResponse = await callCore("GET", "/tasks");
+    let awaitingCount = 0;
+    let queuedCount = 0;
+    for (const task of tasksResponse.data.tasks) {
+      if (task.status === "a_valider") {
+        awaitingCount += 1;
+      } else {
+        queuedCount += 1;
+      }
+    }
+
+    const instancesResponse = await callCore("GET", "/instances_data");
+    const instances = instancesResponse.data.instances_data;
+
+    let totalWastedHours = 0;
+    const instanceRows = [];
+    for (const instanceId in instances) {
+      const instance = instances[instanceId];
+      const wasteResponse = await callCore("GET", "/waste/" + encodeURIComponent(instanceId));
+      const waste = wasteResponse.data;
+      totalWastedHours += waste.wasted_vcpu_hours;
+
+      // the machine's cpu split in three: the client's application, our tasks, and what stays idle
+      const clientPercent = instance.client_cpu_percent;
+      const idlePercent = instance.cpu_free_percent;
+      const tasksPercent = Math.max(0, 100 - clientPercent - idlePercent);
+
+      let costText = "";
+      if (waste.wasted_cost !== null) {
+        costText = ", $" + waste.wasted_cost;
+      }
+
+      instanceRows.push(`
+        <div class="instance">
+          <div class="instance-head">
+            <code>${escapeHtml(instanceId)}</code>
+            <span class="muted">${escapeHtml(instance.vcpus)} vCPU</span>
+          </div>
+          <div class="cpu-bar">
+            <div class="cpu-client" style="width: ${clientPercent}%"></div>
+            <div class="cpu-tasks" style="width: ${tasksPercent}%"></div>
+          </div>
+          <dl class="spec">
+            <dt>Client app</dt><dd>${clientPercent.toFixed(0)}% CPU, ${escapeHtml(instance.client_mem_free_mb)} MB free</dd>
+            <dt>gleaner</dt><dd>${tasksPercent.toFixed(0)}% CPU</dd>
+            <dt>Idle</dt><dd>${idlePercent.toFixed(0)}% CPU, ${waste.wasted_vcpu_hours} vCPU·h wasted so far${escapeHtml(costText)}</dd>
+          </dl>
+        </div>`);
+    }
+
+    document.getElementById("monitoring-numbers").innerHTML = `
+      <div class="number"><div class="number-value">${awaitingCount}</div><div class="number-label">Awaiting review</div></div>
+      <div class="number"><div class="number-value">${queuedCount}</div><div class="number-label">In the queue</div></div>
+      <div class="number"><div class="number-value">${instanceRows.length}</div><div class="number-label">Agents</div></div>
+      <div class="number"><div class="number-value">${totalWastedHours.toFixed(1)}</div><div class="number-label">vCPU·h wasted</div></div>`;
+
+    const instancesElement = document.getElementById("monitoring-instances");
+    if (instanceRows.length === 0) {
+      instancesElement.innerHTML = `<p class="muted">No agent has sent a heartbeat yet.</p>`;
+    } else {
+      instancesElement.innerHTML = instanceRows.join("");
+    }
+    document.getElementById("monitoring-updated").textContent = "Updated " + new Date().toLocaleTimeString();
+  }
+
+
+  // --- Admin
+
+  async function loadAdmin() {
+    const response = await callCore("GET", "/users");
+    const users = response.data.users;
+    const roleNames = Object.keys(roles);
+
+    let roleRows = "";
+    for (const roleName of roleNames) {
+      roleRows += `<dt><code>${escapeHtml(roleName)}</code></dt><dd class="muted">${escapeHtml(roles[roleName].services)}</dd>`;
+    }
+    document.getElementById("admin-roles").innerHTML = roleRows;
+
+    let header = `<th>Person</th>`;
+    for (const roleName of roleNames) {
+      header += `<th class="center">${escapeHtml(roleName)}</th>`;
+    }
+    header += `<th></th>`;
+
+    let rows = "";
+    for (const name in users) {
+      let cells = `<td><strong>${escapeHtml(name)}</strong>`;
+      if (users[name].is_admin) {
+        cells += ` <span class="muted">(admin)</span>`;
+      }
+      cells += `</td>`;
+      for (const roleName of roleNames) {
+        let checked = "";
+        if (users[name].allowed_roles.includes(roleName)) {
+          checked = "checked";
+        }
+        cells += `<td class="center"><input type="checkbox" data-person="${escapeHtml(name)}" data-role="${escapeHtml(roleName)}" aria-label="${escapeHtml(name)} can give ${escapeHtml(roleName)}" ${checked}></td>`;
+      }
+      cells += `<td><button class="link-button" data-name="${escapeHtml(name)}" onclick="saveRoles(this)">Save</button></td>`;
+      rows += `<tr>${cells}</tr>`;
+    }
+
+    document.getElementById("admin-users").innerHTML = `<table><thead><tr>${header}</tr></thead><tbody>${rows}</tbody></table>`;
+  }
+
+  async function saveRoles(button) {
+    const name = button.dataset.name;
+    const allowedRoles = [];
+    for (const checkbox of document.querySelectorAll("#admin-users input[type=checkbox]")) {
+      if (checkbox.dataset.person === name && checkbox.checked) {
+        allowedRoles.push(checkbox.dataset.role);
+      }
+    }
+
+    const response = await callCore("PUT", "/users/" + encodeURIComponent(name) + "/allowed_roles", {
+      admin_key: currentUser.key,
+      allowed_roles: allowedRoles,
+    });
+
+    if (!response.ok) {
+      showMessage("admin-message", "red", errorText(response.data));
+      return;
+    }
+    let rolesText = "no role";
+    if (allowedRoles.length > 0) {
+      rolesText = allowedRoles.join(", ");
+    }
+    showMessage("admin-message", "green", name + " can now give: " + rolesText);
+  }
+</script>
+</body>
+</html>
