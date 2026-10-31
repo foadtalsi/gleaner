@@ -27,7 +27,8 @@ class HeartbeatData(BaseModel):
 class Task(BaseModel):
     task_id: str
     description: str
-    resources: list[str]  # resources the task can use, given by the engineer, e.g. "s3://bucket/folder/"
+    input_resources: list[str]  # resources the task can only read, split into batches by core, e.g. "s3://bucket/photos/"
+    output_resources: list[str]  # resources the task can only write to, never split, e.g. "s3://bucket/resized/"
     user_name: str  # name of the person creating the task, see users.py
     user_key: str  # their key, to prove it is really them
 
