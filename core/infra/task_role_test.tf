@@ -45,7 +45,7 @@ resource "aws_iam_role_policy" "task_exemple_s3" {
 }
 
 
-# the ec2's role can assume this role, and nothing more
+# the ec2's role can assume the task roles, and nothing more
 resource "aws_iam_role_policy" "agent_ec2_assume_task" {
   name = "gleaner-agent-assume-task"
   role = aws_iam_role.agent_ec2.id
@@ -53,9 +53,13 @@ resource "aws_iam_role_policy" "agent_ec2_assume_task" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = "sts:AssumeRole"
-      Resource = aws_iam_role.task_exemple.arn
+      Effect = "Allow"
+      Action = "sts:AssumeRole"
+      Resource = [
+        aws_iam_role.task_exemple.arn,
+        aws_iam_role.task_s3_lecture.arn,
+        aws_iam_role.task_s3_lecture_ecriture.arn,
+      ]
     }]
   })
 }
