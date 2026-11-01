@@ -92,6 +92,7 @@ class Worker:
                             TASK_IMAGE,
                             ["python", "-c", unit["code"]],  # the task code travels in the message, validated by a reviewer
                             name=TASK_NAME,
+                            user="nobody",  # the image runs as root for the agent: the LLM's code must not
                             remove=True,
                             environment={
                                 "GLEANER_TASK": message["Body"],

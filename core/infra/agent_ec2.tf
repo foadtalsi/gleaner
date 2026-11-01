@@ -12,17 +12,6 @@ variable "agent_image" {
   default     = "public.ecr.aws/a3i1n1h9/gleaner-agent:v0.1"
 }
 
-variable "task_image" {
-  description = "Image docker de l'ingenieur lancee pour chaque unite"
-  type        = string
-  default     = "amazon/aws-cli"
-}
-
-# test task: copies entree.txt to sortie.txt in the test bucket, with the gleaner-task-exemple role
-locals {
-  task_command = "s3 cp s3://${aws_s3_bucket.task_test.bucket}/entree.txt s3://${aws_s3_bucket.task_test.bucket}/sortie.txt"
-}
-
 data "aws_ssm_parameter" "amazon_linux" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
 }
@@ -104,8 +93,7 @@ resource "aws_instance" "agent" {
       -e INSTANCE_ID=$INSTANCE_ID \
       -e AWS_DEFAULT_REGION=${var.region} \
       -e QUEUE_URL=${aws_sqs_queue.task_queue.url} \
-      -e TASK_IMAGE=${var.task_image} \
-      -e TASK_COMMAND="${local.task_command}" \
+      -e TASK_IMAGE=${var.agent_image} \
       ${var.agent_image}
   EOT
 
