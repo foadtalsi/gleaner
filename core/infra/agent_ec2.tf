@@ -65,7 +65,9 @@ resource "aws_security_group" "agent_ec2" {
 }
 
 
+# 2 identical machines, to show several agents sharing the batches of a task through the queue
 resource "aws_instance" "agent" {
+  count                  = 2
   ami                    = data.aws_ssm_parameter.amazon_linux.value
   instance_type          = "t3.small"
   iam_instance_profile   = aws_iam_instance_profile.agent_ec2.name
@@ -98,11 +100,11 @@ resource "aws_instance" "agent" {
   EOT
 
   tags = {
-    Name = "gleaner-agent-test"
+    Name = "gleaner-agent-test-${count.index}"
   }
 }
 
-output "agent_instance_id" {
-  description = "Id de l'EC2 de test, c'est aussi l'instance_id que l'agent envoie a core"
-  value       = aws_instance.agent.id
+output "agent_instance_ids" {
+  description = "Ids des EC2 de test, ce sont aussi les instance_id que les agents envoient a core"
+  value       = aws_instance.agent[*].id
 }

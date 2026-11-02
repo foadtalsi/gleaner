@@ -2,7 +2,7 @@
 # full walkthrough: docs/architecture.md
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from llm import choose_task_iam_role, create_task_code, send_task_to_sqs
 from instances import instance_data
@@ -22,7 +22,7 @@ class HeartbeatData(BaseModel):
     period_seconds: float  # duration covered by the measurement
     client_cpu_percent: float  # % of the machine's cpu used by the client's application (without our tasks), computed by the agent
     client_mem_free_mb: int  # free memory if our tasks were not there, computed by the agent
-    agent_key: str  # so core knows the heartbeat really comes from the agent, and not from an intruder
+    agent_key: str = Field(exclude=True)  # so core knows the heartbeat really comes from the agent; exclude: never sent back by /instances_data
 
 
 class Task(BaseModel):
