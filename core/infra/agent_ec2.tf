@@ -9,7 +9,7 @@ variable "core_url" {
 variable "agent_image" {
   description = "Image publique de l'agent, publiee par core/registry"
   type        = string
-  default     = "public.ecr.aws/a3i1n1h9/gleaner-agent:v0.1"
+  default     = "public.ecr.aws/a3i1n1h9/gleaner-agent:v0.2"
 }
 
 data "aws_ssm_parameter" "amazon_linux" {
