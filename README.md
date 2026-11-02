@@ -104,7 +104,7 @@ terraform -chdir=core/hosting output -raw core_ip
 
 Point the DNS A record of your domain to this IP (DNS only, no proxy: Caddy needs port 80 for its certificate). core answers on HTTPS about 2 minutes later.
 
-**4. Add photos** to `s3://gleaner-task-test-<account id>/photos/`, open the web interface and sign in. The demo users are in `core/ec2/users.py`: `ingenieur_1` creates the task, `ingenieur_2` approves it, `admin` manages the roles.
+**4. Add photos** to `s3://gleaner-task-test-<account id>/photos/`, open the web interface and sign in. The demo users are in `core/ec2/users.py`: `engineer_1` creates the task, `engineer_2` approves it, `admin` manages the roles.
 
 **5. Destroy everything** when you're done:
 

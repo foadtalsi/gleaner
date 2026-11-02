@@ -4,13 +4,13 @@
 # the client's closed list of roles: a task can only receive one of these roles
 # the roles are created in core/infra/task_roles.tf, their names must match these ARNs
 task_possible_roles = { # iam roles that tasks can use
-    "s3-lecture": {
+    "s3-read": {
         "arn": "arn:aws:iam::454492134174:role/gleaner-task-s3-lecture",
-        "services": "S3 : lecture",
+        "services": "S3: read",
     },
-    "s3-lecture-ecriture": {
+    "s3-read-write": {
         "arn": "arn:aws:iam::454492134174:role/gleaner-task-s3-lecture-ecriture",
-        "services": "S3 : lecture et ecriture",
+        "services": "S3: read and write",
     },
 }
 
@@ -19,16 +19,16 @@ users = {
     "admin": {
         "key": "admin_key",
         "is_admin": True,
-        "allowed_roles": ["s3-lecture", "s3-lecture-ecriture"],
+        "allowed_roles": ["s3-read", "s3-read-write"],
     },
-    "ingenieur_1": {
-        "key": "ingenieur_1_key",
+    "engineer_1": {
+        "key": "engineer_1_key",
         "is_admin": False,
-        "allowed_roles": ["s3-lecture", "s3-lecture-ecriture"],
+        "allowed_roles": ["s3-read", "s3-read-write"],
     },
-    "ingenieur_2": {
-        "key": "ingenieur_2_key",
+    "engineer_2": {
+        "key": "engineer_2_key",
         "is_admin": False,
-        "allowed_roles": ["s3-lecture"],
+        "allowed_roles": ["s3-read"],
     },
 }

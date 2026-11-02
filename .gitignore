@@ -6,3 +6,4 @@ core/infra/.terraform/
 core/registry/.terraform/
 core/hosting/.terraform/
 .env
+videos/

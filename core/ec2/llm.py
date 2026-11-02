@@ -39,10 +39,10 @@ def choose_task_iam_role(task):
     task_role = ask_llm(prompt).strip()
 
     if task_role not in users[task.user_name]["allowed_roles"]: # checks that the role chosen by the LLM is in the list of roles the person can give to their tasks
-        raise ValueError(f"Role non autorise : {task_role}")
+        raise ValueError(f"Role not allowed: {task_role}")
 
     if task_role not in task_possible_roles: # checks that the role chosen by the LLM is in the list of possible roles
-        raise ValueError(f"Role inconnu : {task_role}")
+        raise ValueError(f"Unknown role: {task_role}")
 
 
 

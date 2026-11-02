@@ -49,7 +49,7 @@ class TaskValidation(BaseModel):
 def heartbeat(instance_id: str, data: HeartbeatData):
     # Check that the agent key is valid
     if data.agent_key not in AGENTS_KEY_DIR.values():
-        raise HTTPException(status_code=403, detail="Clé d'agent non valide")
+        raise HTTPException(status_code=403, detail="Invalid agent key")
 
     instance_data[instance_id] = data
 
@@ -85,11 +85,11 @@ def get_waste(instance_id: str):
 def create_task(task: Task):
     # 1. the person must exist
     if task.user_name not in users:
-        raise HTTPException(status_code=403, detail="Utilisateur inconnu")
+        raise HTTPException(status_code=403, detail="Unknown user")
 
     # 2. the key must be theirs, otherwise anyone could create a task on their behalf
     if users[task.user_name]["key"] != task.user_key:
-        raise HTTPException(status_code=403, detail="Clé d'utilisateur non valide")
+        raise HTTPException(status_code=403, detail="Invalid user key")
 
     # 3. choose the IAM role the task must use, based on what the person is allowed to give to their tasks
     task_iam_role = choose_task_iam_role(task)
@@ -150,16 +150,16 @@ def set_allowed_roles(name: str, admin_request: AllowedRolesUpdate):
             if user["is_admin"]:
                 sender_is_admin = True
     if sender_is_admin == False:
-        raise HTTPException(status_code=403, detail="Réservé aux admins")
+        raise HTTPException(status_code=403, detail="Admins only")
 
     # 2. the person to modify must exist
     if name not in users:
-        raise HTTPException(status_code=404, detail="Personne inconnue")
+        raise HTTPException(status_code=404, detail="Unknown person")
 
     # 3. each role must be in the closed list
     for role in admin_request.allowed_roles:
         if role not in task_possible_roles:
-            raise HTTPException(status_code=400, detail="Rôle inconnu : " + role)
+            raise HTTPException(status_code=400, detail="Unknown role: " + role)
 
     # 4. all good: replace the person's list
     users[name]["allowed_roles"] = admin_request.allowed_roles
@@ -178,7 +178,7 @@ def validate_task(task_validation: TaskValidation, task_id: str):
             task_to_validate = task
 
     if task_to_validate is None:
-        raise HTTPException(status_code=404, detail="Tâche inconnue")
+        raise HTTPException(status_code=404, detail="Unknown task")
 
 
     author_name = task_to_validate["task"].user_name
@@ -187,23 +187,23 @@ def validate_task(task_validation: TaskValidation, task_id: str):
 
     # 2. the validator must exist
     if validator not in users:
-        raise HTTPException(status_code=403, detail="Validateur inconnu")
+        raise HTTPException(status_code=403, detail="Unknown reviewer")
 
     # 3. the key must be theirs
     if users[validator]["key"] != task_validation.validator_key:
-        raise HTTPException(status_code=403, detail="Clé du validateur non valide")
+        raise HTTPException(status_code=403, detail="Invalid reviewer key")
 
     # 4. the validator cannot be the author: four-eyes rule
     if validator == author_name:
-        raise HTTPException(status_code=403, detail="L'auteur ne peut pas valider sa propre tâche")
+        raise HTTPException(status_code=403, detail="The author can't approve their own task")
 
     # 5. the task must not already be validated, otherwise it would go to SQS twice
     if task_to_validate["status"] != "a_valider":
-        raise HTTPException(status_code=400, detail="Tâche déjà validée")
+        raise HTTPException(status_code=400, detail="Task already approved")
 
     # 6. the task's role must be in the author's allowed roles
     if task_role not in users[author_name]["allowed_roles"]:
-        raise HTTPException(status_code=403, detail="Rôle non autorisé pour l'auteur")
+        raise HTTPException(status_code=403, detail="Role not allowed for the author")
 
 
     # 7. put the task in the sqs queue, then mark it validated

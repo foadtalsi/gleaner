@@ -6,17 +6,19 @@
 <title>gleaner</title>
 <style>
   :root {
-    --cosmic: #23212C;
-    --raised: #2B2934;
-    --code: #1C1B23;
-    --line: #36343F;
-    --text: #DCDBE0;
-    --strong: #F4F3F6;
-    --muted: #8F8D98;
-    --button-text: #23212C;
-    --amber: #D8B271;
-    --green: #8FBF9F;
-    --red: #E2897F;
+    --page: #FFFFFF;
+    --cosmic: #23212C;  /* the brand color: titles, buttons, code */
+    --raised: #FFFFFF;
+    --soft: #F7F7F9;
+    --line: #E4E3E8;
+    --guide: rgba(35, 33, 44, 0.08);  /* the frame lines: light enough to stay subtle over the ribbon */
+    --text: #3D3B46;
+    --strong: #23212C;
+    --muted: #6F6D79;
+    --tone: #75737F;
+    --amber: #A5650B;
+    --green: #1F7A4D;
+    --red: #C03B2B;
     --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
     --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
@@ -26,7 +28,7 @@
 
   body {
     margin: 0;
-    background: var(--cosmic);
+    background: var(--page);
     color: var(--text);
     font-family: var(--font);
     font-size: 15px;
@@ -34,231 +36,366 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  .container { max-width: 960px; margin: 0 auto; padding: 0 16px; }
-  h1, h2, h3, p { margin: 0; }
-  h2 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; color: var(--strong); }
-  h3 { font-size: 17px; font-weight: 700; color: var(--strong); }
+  h1, h2, h3, p, dl { margin: 0; }
+  h3 { font-size: 17px; font-weight: 600; color: var(--strong); }
+  a { color: inherit; text-decoration: none; }
   code, .mono { font-family: var(--mono); font-size: 13px; }
   .muted { color: var(--muted); }
+  .tone { color: var(--tone); }
   .amber { color: var(--amber); }
   .green { color: var(--green); }
   .red { color: var(--red); }
 
+  /* the centered column between two thin vertical lines, like on stripe.com */
+  .frame { max-width: 1080px; margin: 0 auto; border-left: 1px solid var(--guide); border-right: 1px solid var(--guide); }
+  .frame-inner { padding: 0 56px; }
+  #app-view main.frame { min-height: calc(100vh - 65px); }  /* the lines go down to the bottom of the window */
+
   /* buttons and fields */
   button { font: inherit; cursor: pointer; }
   .button {
-    border: 0; border-radius: 6px; padding: 10px 18px;
-    background: var(--text); color: var(--button-text); font-weight: 700;
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--strong); border-radius: 6px; padding: 10px 18px;
+    background: var(--cosmic); color: #FFFFFF; font-weight: 600; white-space: nowrap;
   }
-  .button:hover { background: var(--strong); }
+  .button:hover { background: #3A3846; border-color: #3A3846; }
   .button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .button-outline { background: var(--page); color: var(--strong); border-color: #D3D2D9; }
+  .button-outline:hover { background: var(--soft); border-color: #B9B7C1; }
+  .button-small { padding: 6px 12px; font-size: 14px; }
+  .chevron { font-size: 1.15em; line-height: 1; }
   .link-button { border: 0; background: none; padding: 0; color: var(--muted); font-weight: 600; }
   .link-button:hover { color: var(--strong); }
   .button:focus-visible, .link-button:focus-visible, .tab:focus-visible, input:focus-visible, textarea:focus-visible {
-    outline: 2px solid var(--text); outline-offset: 2px;
+    outline: 2px solid var(--strong); outline-offset: 2px;
   }
 
-  label { display: block; font-weight: 700; font-size: 14px; color: var(--strong); margin-bottom: 6px; }
-  .hint { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  label { display: block; font-weight: 600; font-size: 14px; color: var(--strong); margin-bottom: 6px; }
+  .hint { color: var(--muted); font-size: 13px; margin-top: 8px; }
   input[type="text"], input[type="password"], textarea {
     width: 100%; padding: 10px 12px; border-radius: 6px;
-    border: 1px solid var(--line); background: var(--raised); color: var(--strong); font: inherit;
+    border: 1px solid #D3D2D9; background: var(--page); color: var(--strong); font: inherit;
   }
-  input::placeholder, textarea::placeholder { color: #66646F; }
-  textarea { resize: vertical; min-height: 88px; }
-  textarea.mono { min-height: 60px; }
-  input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--text); cursor: pointer; }
+  input::placeholder, textarea::placeholder { color: #9D9BA6; }
+  textarea { resize: vertical; min-height: 96px; }
+  textarea.mono { min-height: 64px; }
+  input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--strong); cursor: pointer; }
   .field { margin-bottom: 20px; }
   .two-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
   .message { margin-top: 14px; font-size: 14px; font-weight: 600; }
 
-  /* "label  value" rows, like a spec sheet */
-  .spec { display: grid; grid-template-columns: 130px 1fr; column-gap: 24px; row-gap: 10px; }
-  .spec dt { font-weight: 700; color: var(--strong); }
+  /* "label  value" rows */
+  .spec { display: grid; grid-template-columns: 120px 1fr; column-gap: 24px; row-gap: 10px; font-size: 14px; }
+  .spec dt { font-weight: 600; color: var(--muted); }
   .spec dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-  .spec-wide { grid-template-columns: 200px 1fr; }
+  .spec-wide { grid-template-columns: 220px 1fr; }
 
-  /* header and tabs */
-  header { border-bottom: 1px solid var(--line); }
-  .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 60px; }
-  .wordmark { font-size: 21px; font-weight: 800; letter-spacing: -0.03em; color: var(--strong); }
-  .session { display: flex; align-items: center; gap: 16px; font-size: 14px; }
+  /* status pills */
+  .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+  .pill-amber { color: var(--amber); background: #FCF1DF; }
+  .pill-green { color: var(--green); background: #E3F4EA; }
+  .pill-grey { color: var(--strong); background: #ECEBF0; }
+
+  /* MVP warning on the new task page */
+  .notice { display: flex; align-items: flex-start; gap: 12px; margin: -12px 0 32px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--soft); color: var(--muted); font-size: 13.5px; }
+  .notice .pill { flex-shrink: 0; }
+
+  /* top bar */
+  .topbar { border-bottom: 1px solid var(--guide); }
+  .topbar-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-height: 64px; flex-wrap: wrap; }
+  .topbar-left { display: flex; align-items: center; gap: 40px; min-width: 0; }
+  .wordmark { font-size: 22px; font-weight: 700; letter-spacing: -0.04em; color: var(--strong); }
+  .session { display: flex; align-items: center; gap: 14px; font-size: 14px; }
   .tabs { display: flex; gap: 28px; overflow-x: auto; }
   .tab {
-    border: 0; background: none; padding: 16px 0 13px; border-bottom: 2px solid transparent;
-    color: var(--muted); font-weight: 700; font-size: 14px; white-space: nowrap;
+    border: 0; background: none; padding: 21px 0 19px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+    color: var(--muted); font-weight: 600; font-size: 14.5px; white-space: nowrap;
   }
-  .tab:hover { color: var(--text); }
+  .tab:hover { color: var(--strong); }
   .tab[aria-selected="true"] { color: var(--strong); border-bottom-color: var(--strong); }
-  .tab-count { color: var(--amber); margin-left: 4px; }
+  .tab-count { color: var(--amber); margin-left: 5px; }
 
-  /* sign in */
-  .sign-in { max-width: 400px; margin: 0 auto; padding: 14vh 16px 64px; }
-  .sign-in-title { font-size: 64px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; color: var(--text); }
-  .sign-in-tagline { color: var(--muted); margin: 14px 0 40px; }
-  .sign-in .button { width: 100%; }
-  .sign-in-rules { margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--line); font-size: 14px; }
-  .sign-in-rules .spec { grid-template-columns: 70px 1fr; }
+  /* home: hero with the ribbon */
+  .hero { position: relative; overflow: hidden; }
+  .hero-frame { position: relative; z-index: 1; }
+  .hero-content { padding-top: 120px; padding-bottom: 96px; max-width: 900px; }
+  .hero-stat { font-size: 13.5px; font-weight: 600; color: var(--strong); margin-bottom: 26px; }
+  .hero-stat-value { font-weight: 400; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 6px; }
+  .hero-title { font-size: 44px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; color: var(--strong); }
+  .sign-in-form { display: flex; gap: 10px; margin-top: 44px; flex-wrap: wrap; }
+  .sign-in-form input { width: 190px; height: 44px; }
+  .sign-in-form .button { height: 44px; }
+
+  .ribbon { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+  .ribbon svg { position: absolute; top: -6%; left: 44%; width: 66%; height: 116%; animation: ribbon-sway 14s ease-in-out infinite alternate; }
+  @keyframes ribbon-sway {
+    from { transform: translate(0, 0) rotate(0deg); }
+    to { transform: translate(-18px, 10px) rotate(-1.5deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ribbon svg { animation: none; }
+  }
+
+  /* home: the four guarantees, in the place of stripe's logo strip */
+  .guarantees { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); position: relative; z-index: 1; background: var(--page); }
+  .guarantee { padding: 26px 28px; }
+  .guarantee + .guarantee { border-left: 1px solid var(--line); }
+  .guarantee-name { font-weight: 600; color: var(--strong); font-size: 14.5px; margin-bottom: 4px; }
+  .guarantee-text { color: var(--muted); font-size: 13.5px; }
 
   /* panels */
-  .panel { padding: 36px 0 80px; }
-  .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
-  .narrow { max-width: 720px; }
+  .panel { padding: 64px 0 96px; }
+  .panel-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 40px; }
+  .panel-title { font-size: 32px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; color: var(--strong); max-width: 720px; }
+  .narrow { max-width: 760px; }
+  .section-title { margin: 48px 0 16px; }
 
-  /* tasks */
-  .task { padding: 28px 0; border-top: 1px solid var(--line); }
-  .task:first-child { border-top: 0; padding-top: 0; }
-  .task-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 4px; }
-  .task-status { font-size: 14px; font-weight: 700; white-space: nowrap; }
-  .task-meta { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
-  .task .spec { margin-bottom: 20px; }
-  details { margin-bottom: 20px; }
-  summary { cursor: pointer; font-weight: 700; color: var(--strong); margin-bottom: 10px; }
+  /* cards: tasks, instances, admin */
+  .card { border: 1px solid var(--line); border-radius: 10px; background: var(--raised); padding: 26px 28px; box-shadow: 0 1px 2px rgba(35, 33, 44, 0.04), 0 8px 24px -12px rgba(35, 33, 44, 0.08); }
+  .card + .card { margin-top: 16px; }
+  .task-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 4px; }
+  .task-meta { color: var(--muted); font-size: 13.5px; margin-bottom: 22px; }
+  .task .spec { margin-bottom: 22px; }
+  details { margin-bottom: 22px; }
+  summary { cursor: pointer; font-weight: 600; color: var(--strong); font-size: 14px; margin-bottom: 10px; }
   pre.code {
-    margin: 0; padding: 16px; max-height: 420px; overflow: auto;
-    background: var(--code); border-radius: 6px;
-    font: 12.5px/1.6 var(--mono); color: #CFCDD6; white-space: pre;
+    margin: 0; padding: 18px; max-height: 420px; overflow: auto;
+    background: var(--cosmic); border-radius: 8px;
+    font: 12.5px/1.6 var(--mono); color: #DCDBE0; white-space: pre;
   }
 
   /* monitoring */
   .numbers { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-  .number { padding: 20px 0; }
-  .number + .number { padding-left: 20px; border-left: 1px solid var(--line); }
-  .number-value { font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; color: var(--text); }
-  .number-label { color: var(--muted); font-size: 13px; font-weight: 600; margin-top: 4px; }
-  .instance { padding: 22px 0; border-bottom: 1px solid var(--line); }
-  .instance-head { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-  .cpu-bar { display: flex; height: 6px; background: var(--raised); margin-bottom: 14px; }
-  .cpu-client { background: #6C6A75; }
-  .cpu-tasks { background: var(--text); }
+  .number { padding: 24px 0; }
+  .number + .number { padding-left: 24px; border-left: 1px solid var(--line); }
+  .number-value { font-size: 40px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; color: var(--strong); font-variant-numeric: tabular-nums; }
+  .number-label { color: var(--muted); font-size: 13px; font-weight: 600; margin-top: 6px; }
+  .money {
+    margin-bottom: 40px; padding: 36px 40px; border: 1px solid var(--line); border-radius: 12px;
+    background: radial-gradient(circle at 100% 0%, rgba(255, 138, 76, 0.16), rgba(255, 94, 108, 0.06) 40%, rgba(255, 255, 255, 0) 70%), var(--page);
+  }
+  .money-label { font-weight: 600; color: var(--strong); font-size: 15px; }
+  .money-value {
+    font-size: 72px; font-weight: 600; letter-spacing: -0.04em; line-height: 1.1; margin: 8px 0 12px;
+    font-variant-numeric: tabular-nums; color: #FF5E6C;
+    background: linear-gradient(90deg, #FF5E6C, #FF8A4C); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .money-detail { color: var(--muted); font-size: 14.5px; }
+  .money-detail strong { color: var(--strong); }
+  .instance-head { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+  .cpu-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; background: #ECEBF0; margin-bottom: 18px; }
+  .cpu-client { background: #A9A7B3; }
+  .cpu-tasks { background: linear-gradient(90deg, #FF6F91, #FF9A55); }
+  .cpu-idle { background: #ECEBF0; box-shadow: inset 0 0 0 1px #D3D2D9; }
+  .legend { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 8px; vertical-align: 1px; }
 
   /* admin */
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; padding: 12px 16px 12px 0; border-bottom: 1px solid var(--line); white-space: nowrap; }
-  th { color: var(--muted); font-weight: 700; }
+  tr:last-child td { border-bottom: 0; }
+  th { color: var(--muted); font-weight: 600; }
   .center { text-align: center; }
   .table-scroll { overflow-x: auto; }
-  .section-title { margin: 40px 0 16px; }
 
-  @media (max-width: 640px) {
+  @media (max-width: 760px) {
+    .frame-inner { padding: 0 16px; }
+    .hero-content { padding-top: 88px; padding-bottom: 72px; }
+    .hero-title { font-size: 34px; }
+    .sign-in-form input, .sign-in-form .button { width: 100%; }
+    .ribbon svg { top: -14%; left: 30%; width: 120%; height: 70%; opacity: 0.5; }
+    .guarantees { grid-template-columns: 1fr 1fr; }
+    .guarantee { padding: 20px 16px; }
+    .guarantee:nth-child(3) { border-left: 0; }
+    .guarantee:nth-child(n+3) { border-top: 1px solid var(--line); }
+    .topbar-left { gap: 20px; width: 100%; }
+    .topbar-row { padding-top: 12px; }
+    .tabs { order: 3; width: 100%; gap: 22px; }
+    .tab { padding: 12px 0 11px; }
+    .panel { padding: 40px 0 64px; }
+    .panel-head { flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 28px; }
+    .panel-title { font-size: 25px; }
     .two-columns { grid-template-columns: 1fr; gap: 0; }
+    .card { padding: 20px 16px; }
+    .money { padding: 24px 20px; }
+    .money-value { font-size: 48px; }
     .numbers { grid-template-columns: 1fr 1fr; }
-    .number:nth-child(3) { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
-    .number:nth-child(4) { border-top: 1px solid var(--line); }
-    .spec { grid-template-columns: 96px 1fr; column-gap: 16px; }
+    .number:nth-child(3) { padding-left: 0; border-left: 0; }
+    .number:nth-child(n+3) { border-top: 1px solid var(--line); }
+    .spec { grid-template-columns: 92px 1fr; column-gap: 16px; }
     .spec-wide { grid-template-columns: 1fr; row-gap: 2px; }
     .spec-wide dd { margin-bottom: 10px; }
-    .sign-in-title { font-size: 52px; }
-    .panel-head { flex-direction: column; gap: 6px; }
   }
 </style>
 </head>
 <body>
 
-<!-- sign in -->
-<main id="sign-in-view" class="sign-in">
-  <h1 class="sign-in-title">gleaner</h1>
-  <p class="sign-in-tagline">Run tasks on the CPU your EC2s leave idle.</p>
-
-  <form onsubmit="signIn(event)">
-    <div class="field">
-      <label for="sign-in-name">Name</label>
-      <input type="text" id="sign-in-name" autocomplete="username" required>
+<!-- home and sign in -->
+<div id="sign-in-view">
+  <header class="topbar">
+    <div class="frame">
+      <div class="frame-inner topbar-row">
+        <span class="wordmark">gleaner</span>
+        <a class="button button-outline button-small" href="https://github.com/foadtalsi/gleaner" target="_blank" rel="noopener">GitHub <span class="chevron">›</span></a>
+      </div>
     </div>
-    <div class="field">
-      <label for="sign-in-key">Key</label>
-      <input type="password" id="sign-in-key" autocomplete="current-password" required>
-    </div>
-    <button class="button" type="submit">Sign in</button>
-    <p class="hint">Demo: admin, ingenieur_1, ingenieur_2</p>
-    <p class="message red" id="sign-in-message"></p>
-  </form>
+  </header>
 
-  <div class="sign-in-rules">
-    <dl class="spec">
-      <dt>Admin</dt><dd class="muted">limits the roles each person can give</dd>
-      <dt>LLM</dt><dd class="muted">writes the code, picks the smallest role</dd>
-      <dt>Review</dt><dd class="muted">another person approves, always</dd>
-      <dt>Run</dt><dd class="muted">15-minute credentials, declared resources only</dd>
-    </dl>
-  </div>
-</main>
+  <main>
+    <!-- the ribbon spans the whole width, the frame lines are drawn over it -->
+    <section class="hero">
+      <div class="ribbon" aria-hidden="true">
+        <svg viewBox="0 0 1000 1000" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="ribbon-colors" x1="0" y1="0" x2="1" y2="0.45">
+              <stop offset="0.05" stop-color="#FFC2D4" stop-opacity="0"/>
+              <stop offset="0.2" stop-color="#FFB3CB"/>
+              <stop offset="0.4" stop-color="#FF7A9C"/>
+              <stop offset="0.58" stop-color="#FF5E6C"/>
+              <stop offset="0.76" stop-color="#FF8A4C"/>
+              <stop offset="0.9" stop-color="#FFC46B"/>
+              <stop offset="1" stop-color="#FFC46B" stop-opacity="0.2"/>
+            </linearGradient>
+            <filter id="ribbon-soft"><feGaussianBlur stdDeviation="2.5"/></filter>
+            <filter id="ribbon-glow"><feGaussianBlur stdDeviation="40"/></filter>
+            <clipPath id="ribbon-clip">
+              <path d="M 300 -40 C 380 260, 470 560, 620 1040 L 1080 1040 C 930 620, 780 260, 690 -40 Z"/>
+            </clipPath>
+            <path id="ribbon-strand" d="M 300 -40 C 380 260, 470 560, 620 1040" fill="none"/>
+          </defs>
+          <path d="M 300 -40 C 380 260, 470 560, 620 1040 L 1080 1040 C 930 620, 780 260, 690 -40 Z" fill="url(#ribbon-colors)" filter="url(#ribbon-glow)" opacity="0.35"/>
+          <path d="M 300 -40 C 380 260, 470 560, 620 1040 L 1080 1040 C 930 620, 780 260, 690 -40 Z" fill="url(#ribbon-colors)" filter="url(#ribbon-soft)"/>
+          <!-- thin light strands inside the band, to give the silky look -->
+          <g stroke="#FFFFFF" stroke-opacity="0.15" stroke-width="1.2" clip-path="url(#ribbon-clip)">
+            <use href="#ribbon-strand"/>
+            <use href="#ribbon-strand" transform="translate(30 0)"/>
+            <use href="#ribbon-strand" transform="translate(60 0)"/>
+            <use href="#ribbon-strand" transform="translate(90 0)"/>
+            <use href="#ribbon-strand" transform="translate(120 0)"/>
+            <use href="#ribbon-strand" transform="translate(150 0)"/>
+            <use href="#ribbon-strand" transform="translate(180 0)"/>
+            <use href="#ribbon-strand" transform="translate(210 0)"/>
+            <use href="#ribbon-strand" transform="translate(240 0)"/>
+            <use href="#ribbon-strand" transform="translate(270 0)"/>
+            <use href="#ribbon-strand" transform="translate(300 0)"/>
+            <use href="#ribbon-strand" transform="translate(330 0)"/>
+            <use href="#ribbon-strand" transform="translate(360 0)"/>
+            <use href="#ribbon-strand" transform="translate(390 0)"/>
+            <use href="#ribbon-strand" transform="translate(420 0)"/>
+          </g>
+        </svg>
+      </div>
+
+      <div class="frame hero-frame">
+      <div class="frame-inner hero-content">
+        <p class="hero-stat">Idle CPU measured by gleaner <span class="hero-stat-value" id="idle-number">0.0000 vCPU·h</span></p>
+        <h1 class="hero-title">Run your batch jobs on the CPU you already pay for. <span class="tone">Describe a task in plain English. An LLM writes the code, a teammate approves it, and your idle EC2s run it without slowing your app.</span></h1>
+
+        <form class="sign-in-form" onsubmit="signIn(event)">
+          <input type="text" id="sign-in-name" placeholder="Name" aria-label="Name" autocomplete="username" required>
+          <input type="password" id="sign-in-key" placeholder="Key" aria-label="Key" autocomplete="current-password" required>
+          <button class="button" type="submit">Sign in <span class="chevron">›</span></button>
+        </form>
+        <p class="hint">Demo accounts: admin, engineer_1, engineer_2</p>
+        <p class="message red" id="sign-in-message"></p>
+      </div>
+      </div>
+    </section>
+
+    <section class="frame guarantees">
+      <div class="guarantee"><p class="guarantee-name">Admin</p><p class="guarantee-text">limits the roles each person can give</p></div>
+      <div class="guarantee"><p class="guarantee-name">LLM</p><p class="guarantee-text">writes the code, picks the smallest role</p></div>
+      <div class="guarantee"><p class="guarantee-name">Review</p><p class="guarantee-text">another person approves, always</p></div>
+      <div class="guarantee"><p class="guarantee-name">Run</p><p class="guarantee-text">15-minute credentials, declared resources only</p></div>
+    </section>
+  </main>
+</div>
 
 <!-- application -->
 <div id="app-view" hidden>
-  <header>
-    <div class="container header-row">
-      <span class="wordmark">gleaner</span>
-      <div class="session">
-        <span><span class="muted">Signed in as</span> <strong id="session-name"></strong> <span class="muted" id="session-admin" hidden>(admin)</span></span>
-        <button class="link-button" onclick="signOut()">Sign out</button>
+  <header class="topbar">
+    <div class="frame">
+      <div class="frame-inner topbar-row">
+        <div class="topbar-left">
+          <span class="wordmark">gleaner</span>
+          <nav class="tabs" role="tablist">
+            <button class="tab" role="tab" id="tab-new-task" onclick="showTab('new-task')">New task</button>
+            <button class="tab" role="tab" id="tab-review" onclick="showTab('review')">Review<span class="tab-count" id="review-count" hidden></span></button>
+            <button class="tab" role="tab" id="tab-monitoring" onclick="showTab('monitoring')">Monitoring</button>
+            <button class="tab" role="tab" id="tab-admin" onclick="showTab('admin')" hidden>Admin</button>
+          </nav>
+        </div>
+        <div class="session">
+          <span><strong id="session-name"></strong> <span class="muted" id="session-admin" hidden>(admin)</span></span>
+          <button class="button button-outline button-small" onclick="signOut()">Sign out</button>
+        </div>
       </div>
     </div>
-    <nav class="container tabs" role="tablist">
-      <button class="tab" role="tab" id="tab-new-task" onclick="showTab('new-task')">New task</button>
-      <button class="tab" role="tab" id="tab-review" onclick="showTab('review')">Review<span class="tab-count" id="review-count" hidden></span></button>
-      <button class="tab" role="tab" id="tab-monitoring" onclick="showTab('monitoring')">Monitoring</button>
-      <button class="tab" role="tab" id="tab-admin" onclick="showTab('admin')" hidden>Admin</button>
-    </nav>
   </header>
 
-  <main class="container">
-    <!-- new task -->
-    <section class="panel narrow" id="panel-new-task">
-      <div class="panel-head"><h2>New task</h2></div>
-      <form onsubmit="submitTask(event)">
-        <div class="field">
-          <label for="task-description">What should it do?</label>
-          <textarea id="task-description" required placeholder="Resize the photos of the demo bucket to 800px wide"></textarea>
+  <main class="frame">
+    <div class="frame-inner">
+      <!-- new task -->
+      <section class="panel narrow" id="panel-new-task">
+        <div class="panel-head">
+          <h2 class="panel-title">New task. <span class="tone">Describe it, the LLM writes the code and picks the smallest role.</span></h2>
         </div>
-        <div class="two-columns">
+        <p class="notice"><span class="pill pill-grey">MVP</span> <span>Hackathon MVP, not production-ready: everything is kept in memory and the keys are demo keys. Review the generated code before approving it.</span></p>
+        <form onsubmit="submitTask(event)">
           <div class="field">
-            <label for="task-inputs">Reads</label>
-            <textarea id="task-inputs" class="mono" required placeholder="s3://bucket/photos/"></textarea>
-            <p class="hint">One per line. Split into batches, read only.</p>
+            <label for="task-description">What should it do?</label>
+            <textarea id="task-description" required placeholder="Resize the photos of the demo bucket to 800px wide"></textarea>
           </div>
-          <div class="field">
-            <label for="task-outputs">Writes</label>
-            <textarea id="task-outputs" class="mono" placeholder="s3://bucket/resized/"></textarea>
-            <p class="hint">One per line. Write only. Empty for a read-only task.</p>
+          <div class="two-columns">
+            <div class="field">
+              <label for="task-inputs">Reads</label>
+              <textarea id="task-inputs" class="mono" required placeholder="s3://bucket/photos/"></textarea>
+              <p class="hint">One per line. Split into batches, read only.</p>
+            </div>
+            <div class="field">
+              <label for="task-outputs">Writes</label>
+              <textarea id="task-outputs" class="mono" placeholder="s3://bucket/resized/"></textarea>
+              <p class="hint">One per line. Write only. Empty for a read-only task.</p>
+            </div>
           </div>
+          <button class="button" type="submit" id="new-task-button">Write the code</button>
+          <p class="message" id="new-task-message"></p>
+        </form>
+        <div id="new-task-result" style="margin-top: 40px;"></div>
+      </section>
+
+      <!-- review -->
+      <section class="panel narrow" id="panel-review" hidden>
+        <div class="panel-head">
+          <h2 class="panel-title">Review. <span class="tone">Nothing runs until someone other than the author approves.</span></h2>
+          <button class="button button-outline button-small" onclick="loadReview()">Refresh</button>
         </div>
-        <button class="button" type="submit" id="new-task-button">Write the code</button>
-        <p class="message" id="new-task-message"></p>
-      </form>
-      <div id="new-task-result" style="margin-top: 36px;"></div>
-    </section>
+        <p class="message" id="review-message" style="margin: -16px 0 24px;"></p>
+        <div id="review-list"></div>
+      </section>
 
-    <!-- review -->
-    <section class="panel narrow" id="panel-review" hidden>
-      <div class="panel-head">
-        <h2>Review</h2>
-        <button class="link-button" onclick="loadReview()">Refresh</button>
-      </div>
-      <p class="message" id="review-message" style="margin: -12px 0 24px;"></p>
-      <div id="review-list"></div>
-    </section>
+      <!-- monitoring -->
+      <section class="panel" id="panel-monitoring" hidden>
+        <div class="panel-head">
+          <h2 class="panel-title">Monitoring. <span class="tone">What the agents measure, every 5 seconds.</span></h2>
+          <span class="muted" id="monitoring-updated"></span>
+        </div>
+        <div class="money" id="monitoring-money"></div>
+        <div class="numbers" id="monitoring-numbers"></div>
+        <h3 class="section-title">Instances</h3>
+        <div id="monitoring-instances"></div>
+      </section>
 
-    <!-- monitoring -->
-    <section class="panel" id="panel-monitoring" hidden>
-      <div class="panel-head">
-        <h2>Monitoring</h2>
-        <span class="muted" id="monitoring-updated"></span>
-      </div>
-      <div class="numbers" id="monitoring-numbers"></div>
-      <h3 class="section-title">Instances</h3>
-      <div id="monitoring-instances"></div>
-    </section>
-
-    <!-- admin -->
-    <section class="panel narrow" id="panel-admin" hidden>
-      <div class="panel-head"><h2>Roles</h2></div>
-      <p class="muted" style="margin-bottom: 24px;">The closed list of IAM roles. A task only gets one of them, and only if its author may give it.</p>
-      <dl class="spec spec-wide" id="admin-roles"></dl>
-      <h3 class="section-title">Who can give what</h3>
-      <div class="table-scroll" id="admin-users"></div>
-      <p class="message" id="admin-message"></p>
-    </section>
+      <!-- admin -->
+      <section class="panel narrow" id="panel-admin" hidden>
+        <div class="panel-head">
+          <h2 class="panel-title">Roles. <span class="tone">The closed list of IAM roles. A task only gets one, and only if its author may give it.</span></h2>
+        </div>
+        <div class="card"><dl class="spec spec-wide" id="admin-roles"></dl></div>
+        <h3 class="section-title">Who can give what</h3>
+        <div class="card table-scroll" id="admin-users"></div>
+        <p class="message" id="admin-message"></p>
+      </section>
+    </div>
   </main>
 </div>
 
@@ -269,6 +406,7 @@
   let monitoringTimer = null;  // refreshes the monitoring tab every 5 s while it is open
 
   const tabNames = ["new-task", "review", "monitoring", "admin"];
+  const HOURS_PER_MONTH = 730;  // average month, the unit AWS uses for monthly prices
 
 
   // --- Helpers
@@ -341,6 +479,23 @@
   }
 
 
+  // --- Home
+
+  // the live number at the top of the home page: idle vCPU·h measured on all the agents
+  async function loadIdleNumber() {
+    if (currentUser !== null) {
+      return;
+    }
+    const instancesResponse = await callCore("GET", "/instances_data");
+    let totalWastedHours = 0;
+    for (const instanceId in instancesResponse.data.instances_data) {
+      const wasteResponse = await callCore("GET", "/waste/" + encodeURIComponent(instanceId));
+      totalWastedHours += wasteResponse.data.wasted_vcpu_hours;
+    }
+    document.getElementById("idle-number").textContent = totalWastedHours.toFixed(4) + " vCPU·h";
+  }
+
+
   // --- Sign in
 
   async function signIn(event) {
@@ -378,6 +533,7 @@
     document.getElementById("new-task-message").textContent = "";
     document.getElementById("app-view").hidden = true;
     document.getElementById("sign-in-view").hidden = false;
+    loadIdleNumber();
   }
 
   function showTab(tabName) {
@@ -453,10 +609,10 @@
     }
 
     // the code of an approved task is folded, so the tasks still to review stand out
-    let status = `<span class="task-status green">Approved, in the queue</span>`;
+    let status = `<span class="pill pill-green">Approved, in the queue</span>`;
     let codeOpen = "";
     if (task.status === "a_valider") {
-      status = `<span class="task-status amber">Awaiting review</span>`;
+      status = `<span class="pill pill-amber">Awaiting review</span>`;
       codeOpen = "open";
     }
 
@@ -466,13 +622,13 @@
     } else if (task.user_name === currentUser.name) {
       action = `<p class="muted">You wrote it, so another person has to approve it.</p>`;
     } else {
-      action = `<button class="button" data-task-id="${escapeHtml(task.task_id)}" onclick="approveTask(this)">Approve and run</button>`;
+      action = `<button class="button" data-task-id="${escapeHtml(task.task_id)}" onclick="approveTask(this)">Approve and run <span class="chevron">›</span></button>`;
     }
 
     const codeLines = task.code.split("\n").length;
 
     return `
-      <article class="task">
+      <article class="card task">
         <div class="task-head">
           <h3>${escapeHtml(task.description)}</h3>
           ${status}
@@ -561,25 +717,26 @@
     const instances = instancesResponse.data.instances_data;
 
     let totalWastedHours = 0;
+    let totalWastedCost = 0;
+    let monthlyCost = 0;  // what the CPU idle right now would cost over a month
     const instanceRows = [];
     for (const instanceId in instances) {
       const instance = instances[instanceId];
       const wasteResponse = await callCore("GET", "/waste/" + encodeURIComponent(instanceId));
       const waste = wasteResponse.data;
       totalWastedHours += waste.wasted_vcpu_hours;
+      totalWastedCost += waste.wasted_cost;
 
       // the machine's cpu split in three: the client's application, our tasks, and what stays idle
       const clientPercent = instance.client_cpu_percent;
       const idlePercent = instance.cpu_free_percent;
       const tasksPercent = Math.max(0, 100 - clientPercent - idlePercent);
 
-      let costText = "";
-      if (waste.wasted_cost !== null) {
-        costText = ", $" + waste.wasted_cost;
-      }
+      const idleVcpus = idlePercent / 100 * instance.vcpus;
+      monthlyCost += idleVcpus * HOURS_PER_MONTH * waste.price_per_vcpu_hour;
 
       instanceRows.push(`
-        <div class="instance">
+        <div class="card">
           <div class="instance-head">
             <code>${escapeHtml(instanceId)}</code>
             <span class="muted">${escapeHtml(instance.vcpus)} vCPU</span>
@@ -589,12 +746,22 @@
             <div class="cpu-tasks" style="width: ${tasksPercent}%"></div>
           </div>
           <dl class="spec">
-            <dt>Client app</dt><dd>${clientPercent.toFixed(0)}% CPU, ${escapeHtml(instance.client_mem_free_mb)} MB free</dd>
-            <dt>gleaner</dt><dd>${tasksPercent.toFixed(0)}% CPU</dd>
-            <dt>Idle</dt><dd>${idlePercent.toFixed(0)}% CPU, ${waste.wasted_vcpu_hours} vCPU·h wasted so far${escapeHtml(costText)}</dd>
+            <dt><span class="legend cpu-client"></span>Client app</dt><dd>${clientPercent.toFixed(0)}% CPU, ${escapeHtml(instance.client_mem_free_mb)} MB free</dd>
+            <dt><span class="legend cpu-tasks"></span>gleaner</dt><dd>${tasksPercent.toFixed(0)}% CPU</dd>
+            <dt><span class="legend cpu-idle"></span>Idle</dt><dd>${idlePercent.toFixed(0)}% CPU, ${waste.wasted_vcpu_hours} vCPU·h wasted so far, <strong>$${waste.wasted_cost.toFixed(4)}</strong></dd>
           </dl>
         </div>`);
     }
+
+    // below $1, 4 decimals so the amount visibly grows at each refresh
+    let moneyText = "$" + totalWastedCost.toFixed(2);
+    if (totalWastedCost < 1) {
+      moneyText = "$" + totalWastedCost.toFixed(4);
+    }
+    document.getElementById("monitoring-money").innerHTML = `
+      <p class="money-label">Money wasted on idle CPU</p>
+      <p class="money-value">${moneyText}</p>
+      <p class="money-detail">${totalWastedHours.toFixed(1)} vCPU·h paid for and left idle. <strong>≈ $${monthlyCost.toFixed(2)} / month</strong> at the current rate.</p>`;
 
     document.getElementById("monitoring-numbers").innerHTML = `
       <div class="number"><div class="number-value">${awaitingCount}</div><div class="number-label">Awaiting review</div></div>
@@ -676,6 +843,11 @@
     }
     showMessage("admin-message", "green", name + " can now give: " + rolesText);
   }
+
+
+  // --- Start
+  loadIdleNumber();
+  setInterval(loadIdleNumber, 5000);
 </script>
 </body>
 </html>
