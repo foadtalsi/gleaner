@@ -26,7 +26,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY agent.py worker.py ./
+COPY agent.py worker.py proxy.py ./
 
 # default values, to override at launch with -e
 ENV CORE_URL=http://localhost:8000 \
